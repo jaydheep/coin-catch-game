@@ -1,16 +1,22 @@
 # Coin Catch
 
-A fast arcade game in the browser. Move the plate with the arrow keys, by dragging, or with the on-screen buttons.
+An arcade game with **1000 stages**. Every stage has its own mission, and every 10 stages you enter a new world with a new colour theme and a new weather effect. Stage 10 of each world is a boss stage.
 
-- Coin: +1
-- Bonus: +5
-- Bomb: -2 points and one life
+## Missions
+Score points, catch coins, collect gems, survive, let bombs fall past, chain catches, grab power-ups, score with no hit, catch one coin colour, and boss stages. Missions repeat in a cycle of 10, and targets and speed grow as the stage number goes up.
 
-You have 3 lives. Lose all three and the game is over. Every 14 seconds the level goes up, the colours change and things fall faster.
+## Rules
+- Coin +1, gem +5, bomb -2 and one life. You have 3 lives per stage.
+- Combo: every 5 catches in a row raises the score multiplier, up to x5. Missing a coin resets it.
+- Power-ups: S shield, M magnet, T slow motion, x2 double points, W wide plate.
+- Clear a stage with 3 lives for 3 stars. Replay to improve your stars.
 
-Press **P**, **Space** or the pause button to pause. Resume gives you a 3 second countdown and the game continues where it stopped. Your score goes into the Top 10, which is stored in your browser (localStorage).
+## Controls
+Drag on the screen, arrow keys or A / D, or the on-screen buttons on touch devices. P, Esc or Space pauses. Resume gives a 3 second countdown.
 
-Plain HTML, CSS and JavaScript, so there is no build step. The layout adapts to phones, tablets, laptops and large screens.
+Progress, stars and the leaderboard are saved in the browser (localStorage). The page is locked to one screen, so it does not scroll on phones.
+
+Plain HTML, CSS and JavaScript, so there is no build step.
 
 ## Run locally
 Open `index.html`, or run `python -m http.server` and visit http://localhost:8000.

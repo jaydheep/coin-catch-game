@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Coin Catch</title>
-<meta name="description" content="Catch coins, grab bonuses, dodge bombs. Three bombs and you are out.">
+<meta name="description" content="Coin Catch: 1000 stages, a new mission in every stage. Catch coins, grab power-ups, dodge bombs.">
+<meta name="theme-color" content="#160a2b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
@@ -12,59 +13,77 @@
 </head>
 <body>
 <div class="app">
-  <main class="game">
-    <header class="hud">
+  <header id="hud" class="hud">
+    <div class="row">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
-      <div class="mid"><span id="lvl">Level 1</span><div id="hearts" aria-label="Lives left"></div></div>
-      <div class="stat r"><span>Best</span><b id="best">0</b></div>
-      <button id="pauseBtn" class="icon" type="button" aria-label="Pause or resume">&#10074;&#10074;</button>
-    </header>
-    <div id="stage" class="stage">
-      <canvas id="c" width="400" height="560" aria-label="Coin Catch game"></canvas>
-      <div id="overlay">
-        <section id="menu" class="panel">
-          <h1>Coin Catch</h1>
-          <p>Move the plate and catch what falls.</p>
-          <ul class="legend">
-            <li><i class="coin"></i>Coin +1</li>
-            <li><i class="bonus"></i>Bonus +5</li>
-            <li><i class="bomb"></i>Bomb -2</li>
-          </ul>
-          <p class="rule">You have 3 lives. Each bomb you catch costs one.</p>
-          <input id="name" maxlength="14" placeholder="Your name" autocomplete="off" aria-label="Your name">
-          <button id="start" class="cta" type="button">Play</button>
-          <small>Arrow keys or drag to move. P pauses.</small>
-        </section>
-        <section id="pause" class="panel" hidden>
-          <h2>Paused</h2>
-          <p>Your game is on hold. Resume starts with a 3 second countdown.</p>
-          <button id="resume" class="cta" type="button">Resume</button>
-          <button id="quit" class="ghost" type="button">End game and save score</button>
-        </section>
-        <section id="over" class="panel over" hidden>
-          <h2 class="glitch" data-text="GAME OVER">GAME OVER</h2>
-          <p class="out">All 3 lives are gone.</p>
-          <div id="badge" class="badge" hidden>New high score!</div>
-          <dl class="sum">
-            <div><dt>Score</dt><dd id="fScore">0</dd></div>
-            <div><dt>Level</dt><dd id="fLevel">1</dd></div>
-            <div><dt>Top 10 rank</dt><dd id="fRank">-</dd></div>
-          </dl>
-          <button id="again" class="cta" type="button">Play again</button>
-          <button id="change" class="ghost" type="button">Change name</button>
-        </section>
+      <div class="mid"><span id="stageLbl">Stage 1</span><div id="hearts" aria-label="Lives left"></div></div>
+      <div class="btns">
+        <button id="muteBtn" class="icon" type="button" aria-label="Sound on or off">&#9834;</button>
+        <button id="pauseBtn" class="icon" type="button" aria-label="Pause or resume">&#10074;&#10074;</button>
       </div>
     </div>
-    <div class="pad">
-      <button id="left" type="button" aria-label="Move left">&#9664;</button>
-      <button id="right" type="button" aria-label="Move right">&#9654;</button>
+    <div class="mission"><span id="mText"></span><b id="mCount"></b><div class="bar"><i id="mBar"></i></div></div>
+  </header>
+  <div id="stage" class="stage">
+    <canvas id="c" width="400" height="560" aria-label="Coin Catch game"></canvas>
+    <div id="overlay">
+      <section id="menu" class="panel">
+        <h1>Coin Catch</h1>
+        <p>1000 stages. Every stage has a new mission.</p>
+        <input id="name" maxlength="14" placeholder="Your name" autocomplete="off" aria-label="Your name">
+        <button id="play" class="cta" type="button">Play</button>
+        <button id="openStages" class="ghost" type="button">Choose stage</button>
+        <button id="openBoard" class="ghost" type="button">Leaderboard</button>
+        <small>Drag, arrow keys or A / D to move. P pauses.</small>
+      </section>
+      <section id="stages" class="panel" hidden>
+        <div class="nav">
+          <button id="wPrev" class="icon" type="button" aria-label="Previous world">&#9664;</button>
+          <div><h2 id="wTitle">World 1</h2><small id="wSub"></small></div>
+          <button id="wNext" class="icon" type="button" aria-label="Next world">&#9654;</button>
+        </div>
+        <div id="grid" class="grid"></div>
+        <button id="wCur" class="ghost" type="button">Go to my stage</button>
+        <button id="stBack" class="ghost" type="button">Back</button>
+      </section>
+      <section id="board" class="panel" hidden>
+        <h2>Leaderboard</h2>
+        <ol id="list"></ol>
+        <button id="bdBack" class="ghost" type="button">Back</button>
+        <small>Created by Jaydheep</small>
+      </section>
+      <section id="pause" class="panel" hidden>
+        <h2>Paused</h2>
+        <p>Resume starts with a 3 second countdown.</p>
+        <button id="resume" class="cta" type="button">Resume</button>
+        <button id="restart" class="ghost" type="button">Restart stage</button>
+        <button id="pauseStages" class="ghost" type="button">All stages</button>
+      </section>
+      <section id="clear" class="panel" hidden>
+        <h2 class="win">STAGE CLEAR</h2>
+        <p id="cInfo"></p>
+        <div id="stars"><span>&#9733;</span><span>&#9733;</span><span>&#9733;</span></div>
+        <dl class="sum">
+          <div><dt>Score</dt><dd id="cScore">0</dd></div>
+          <div><dt>Lives left</dt><dd id="cLives">0</dd></div>
+          <div><dt>Total stars</dt><dd id="cTotal">0</dd></div>
+        </dl>
+        <button id="next" class="cta" type="button">Next stage</button>
+        <button id="replay" class="ghost" type="button">Replay for more stars</button>
+        <button id="clStages" class="ghost" type="button">All stages</button>
+      </section>
+      <section id="over" class="panel over" hidden>
+        <h2 class="glitch" data-text="GAME OVER">GAME OVER</h2>
+        <p id="oMsg" class="out"></p>
+        <button id="retry" class="cta" type="button">Try again</button>
+        <button id="ovStages" class="ghost" type="button">All stages</button>
+      </section>
     </div>
-  </main>
-  <aside class="board">
-    <h2>Top 10</h2>
-    <ol id="list"></ol>
-    <small>Created by Jaydheep</small>
-  </aside>
+  </div>
+  <div class="pad">
+    <button id="left" type="button" aria-label="Move left">&#9664;</button>
+    <button id="right" type="button" aria-label="Move right">&#9654;</button>
+  </div>
 </div>
 <script src="script.js"></script>
 </body>

@@ -4,11 +4,13 @@ A fast arcade game in the browser. Move the plate with the arrow keys, by draggi
 
 - Coin: +1
 - Bonus: +5
-- Bomb: -2
+- Bomb: -2 points and one life
 
-Press **Stop and save** to end a round and add your score to the Top 10. The leaderboard is stored in your browser (localStorage), so it works on any static host.
+You have 3 lives. Lose all three and the game is over. Every 14 seconds the level goes up, the colours change and things fall faster.
 
-Plain HTML, CSS and JavaScript, so there is no build step.
+Press **P**, **Space** or the pause button to pause. Resume gives you a 3 second countdown and the game continues where it stopped. Your score goes into the Top 10, which is stored in your browser (localStorage).
+
+Plain HTML, CSS and JavaScript, so there is no build step. The layout adapts to phones, tablets, laptops and large screens.
 
 ## Run locally
 Open `index.html`, or run `python -m http.server` and visit http://localhost:8000.

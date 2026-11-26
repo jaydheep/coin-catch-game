@@ -1,243 +1,259 @@
-const W = 400, H = 560;
+const W = 400, H = 560, LEVEL_SECS = 14, MAX_LIVES = 3;
 const $ = id => document.getElementById(id);
-const cv = $('c'), ctx = cv.getContext('2d'), stage = $('stage'), wrap = $('wrap'), overlay = $('overlay');
-const scoreEl = $('score'), bestEl = $('best'), whoEl = $('who'), comboEl = $('combo');
-const titleEl = $('title'), subEl = $('sub'), nameIn = $('name'), startBtn = $('start'), muteBtn = $('mute');
-const lists = [$('list'), $('list2')];
+const cv = $('c'), ctx = cv.getContext('2d'), stage = $('stage'), root = document.documentElement;
+const scoreEl = $('score'), bestEl = $('best'), lvlEl = $('lvl'), heartsEl = $('hearts'), listEl = $('list'), nameIn = $('name'), overlay = $('overlay');
 const KEY = 'coin-catch-scores', NAME = 'coin-catch-name';
-const TYPES = { coin: { c: '#ffc83d', pts: 1 }, bonus: { c: '#9dff4d', pts: 5 }, bomb: { c: '#ff3d7f', pts: -2 } };
-const player = { x: 158, y: 500, w: 84, h: 18, flash: 0 };
-let items = [], parts = [], texts = [], score = 0, combo = 0, state = 'idle';
-let last = 0, elapsed = 0, spawnIn = 0, shake = 0, flash = 0, user = '';
-let left = false, right = false, muted = false, ac, scale = 1;
-const stars = Array.from({ length: 70 }, () => ({ x: Math.random() * W, y: Math.random() * H, z: Math.random() }));
 
-/* ---------- storage ---------- */
+const THEMES = [
+  { n: 'Midnight', t: [34, 14, 66], b: [10, 5, 28], a: [61, 245, 224] },
+  { n: 'Ocean', t: [8, 52, 96], b: [3, 14, 42], a: [96, 220, 255] },
+  { n: 'Sunset', t: [124, 36, 88], b: [32, 8, 40], a: [255, 176, 72] },
+  { n: 'Aurora', t: [8, 84, 72], b: [4, 22, 36], a: [140, 255, 120] },
+  { n: 'Inferno', t: [116, 22, 22], b: [26, 4, 10], a: [255, 112, 72] },
+  { n: 'Cosmos', t: [52, 30, 124], b: [8, 6, 30], a: [204, 152, 255] }
+];
+const TYPES = { coin: { c: '#ffc83d', pts: 1 }, bonus: { c: '#9dff4d', pts: 5 }, bomb: { c: '#ff3d7f', pts: -2 } };
+const rgb = (a, al = 1) => `rgba(${a.map(Math.round).join(',')},${al})`;
+
+const player = { x: 158, y: 500, w: 84, h: 18 };
+let items = [], parts = [], score = 0, lives = MAX_LIVES, level = 0, playTime = 0, spawnIn = 0;
+let shake = 0, flash = 0, invuln = 0, banner = 0, bannerText = '', cd = 0, dyingT = 0, prevBest = 0;
+let state = 'menu', last = 0, user = '', scale = 1, left = false, right = false;
+let cur = { t: [...THEMES[0].t], b: [...THEMES[0].b], a: [...THEMES[0].a] };
+const stars = Array.from({ length: 46 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: .3 + Math.random() * .7 }));
+
 const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 let scores = read(KEY) || [{ name: 'Roshan', score: 63 }, { name: 'jay', score: 31 }, { name: 'Player', score: 5 }];
 
+function showPanel(id) {
+  overlay.classList.remove('hide');
+  ['menu', 'pause', 'over'].forEach(p => $(p).hidden = p !== id);
+}
+const hidePanels = () => overlay.classList.add('hide');
+
+function renderHearts() {
+  heartsEl.innerHTML = '';
+  for (let i = 0; i < MAX_LIVES; i++) {
+    const h = document.createElement('i');
+    h.textContent = '\u2665';
+    if (i >= lives) h.className = 'lost';
+    heartsEl.appendChild(h);
+  }
+}
+
 function renderBoard(newest) {
-  lists.forEach((ul, i) => {
-    ul.innerHTML = '';
-    scores.slice(0, i ? 3 : 10).forEach(s => {
-      const li = document.createElement('li');
-      li.textContent = s.name;
-      const sp = document.createElement('span');
-      sp.textContent = s.score;
-      li.appendChild(sp);
-      if (s === newest) li.className = 'new';
-      ul.appendChild(li);
-    });
+  listEl.innerHTML = '';
+  scores.forEach(s => {
+    const li = document.createElement('li');
+    li.textContent = s.name;
+    const sp = document.createElement('span'); sp.textContent = s.score;
+    li.appendChild(sp);
+    if (s === newest) li.className = 'new';
+    listEl.appendChild(li);
   });
   bestEl.textContent = scores.length ? scores[0].score : 0;
 }
 
-/* ---------- sound ---------- */
-function beep(f, d, type, v) {
-  if (muted || !ac) return;
-  try {
-    const o = ac.createOscillator(), g = ac.createGain();
-    o.type = type || 'sine'; o.frequency.value = f;
-    g.gain.setValueAtTime(v || 0.07, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + d);
-    o.connect(g); g.connect(ac.destination);
-    o.start(); o.stop(ac.currentTime + d);
-  } catch {}
-}
+function showBanner() { banner = 1.8; bannerText = THEMES[level % THEMES.length].n; }
 
-/* ---------- sizing: fit the stage to any screen ---------- */
-function fit() {
-  const r = wrap.getBoundingClientRect();
-  scale = Math.max(0.3, Math.min(r.width / W, r.height / H));
-  stage.style.width = W * scale + 'px';
-  stage.style.height = H * scale + 'px';
-  stage.style.fontSize = Math.max(9, 16 * scale) + 'px';
-  const d = Math.min(window.devicePixelRatio || 1, 2);
-  cv.width = Math.round(W * scale * d);
-  cv.height = Math.round(H * scale * d);
-  ctx.setTransform(scale * d, 0, 0, scale * d, 0, 0);
-}
-new ResizeObserver(fit).observe(wrap);
-fit();
-
-/* ---------- game flow ---------- */
-const mult = () => Math.min(4, 1 + Math.floor(combo / 5));
-
-function showCombo() {
-  comboEl.textContent = combo >= 2 ? (mult() > 1 ? `x${mult()} multiplier  |  ${combo} streak` : `${combo} streak`) : '';
-}
-
-function start() {
-  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch {}
+function startGame() {
   user = nameIn.value.trim() || 'Player';
-  write(NAME, user); whoEl.textContent = user;
-  score = 0; combo = 0; items = []; parts = []; texts = [];
-  elapsed = 0; spawnIn = 0.4; shake = 0; flash = 0;
+  write(NAME, user);
+  prevBest = scores.length ? scores[0].score : 0;
+  items = []; parts = []; score = 0; lives = MAX_LIVES; level = 0; playTime = 0; spawnIn = .5;
+  shake = flash = invuln = 0; left = right = false;
   player.x = (W - player.w) / 2;
-  scoreEl.textContent = 0; showCombo();
-  overlay.classList.add('hide');
-  state = 'run'; last = performance.now();
+  const th = THEMES[0]; cur = { t: [...th.t], b: [...th.b], a: [...th.a] };
+  scoreEl.textContent = 0; lvlEl.textContent = 'Level 1';
+  renderHearts(); showBanner(); hidePanels();
+  state = 'run';
 }
 
-function stop() {
+function pause() {
   if (state !== 'run') return;
-  state = 'over';
-  const prevBest = scores.length ? scores[0].score : 0;
+  state = 'paused'; left = right = false;
+  showPanel('pause'); $('resume').focus();
+}
+function resume() {
+  if (state !== 'paused') return;
+  hidePanels(); state = 'count'; cd = 3;
+}
+
+function die() {
+  state = 'dying'; dyingT = 1.4; shake = .7; flash = .8;
+  burst(player.x + player.w / 2, player.y, '#ff3d7f', 40);
+  burst(player.x + player.w / 2, player.y, '#ffb048', 40);
+  burst(player.x + player.w / 2, player.y, '#ffffff', 20);
+}
+
+function gameOver() {
+  state = 'over'; items = [];
   const entry = { name: user, score };
   scores.push(entry);
   scores.sort((a, b) => b.score - a.score);
   scores = scores.slice(0, 10);
   write(KEY, scores);
-  renderBoard(scores.includes(entry) ? entry : null);
-  titleEl.textContent = 'Round over';
-  subEl.textContent = score > prevBest ? `New best! You scored ${score}.` : `You scored ${score}.`;
-  startBtn.textContent = 'Play again';
-  overlay.classList.remove('hide');
-  beep(300, 0.35, 'triangle', 0.08);
+  const idx = scores.indexOf(entry);
+  renderBoard(idx >= 0 ? entry : null);
+  $('fScore').textContent = score;
+  $('fLevel').textContent = level + 1;
+  $('fRank').textContent = idx >= 0 ? '#' + (idx + 1) : '-';
+  $('badge').hidden = !(score > prevBest && score > 0);
+  showPanel('over'); $('again').focus();
 }
 
 function spawn() {
+  const bombP = .2 + Math.min(level * .015, .1);
   const r = Math.random();
-  const type = r < 0.2 ? 'bomb' : r < 0.3 ? 'bonus' : 'coin';
-  items.push({ x: 16 + Math.random() * (W - 32), y: -16, type, seed: Math.random() * 6 });
+  const type = r < bombP ? 'bomb' : r < bombP + .1 ? 'bonus' : 'coin';
+  items.push({ x: 14 + Math.random() * (W - 28), y: -14, type });
 }
 
 function burst(x, y, color, n) {
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 170;
-    parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life: 0.6, color });
+    const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 190;
+    parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: .5 + Math.random() * .5, color });
   }
 }
+
+function collect(it) {
+  const t = TYPES[it.type];
+  if (it.type === 'bomb') {
+    if (invuln > 0) { burst(it.x, it.y, t.c, 10); return; }
+    score = Math.max(0, score + t.pts);
+    lives--; invuln = 1; shake = .35; flash = .35;
+    renderHearts(); burst(it.x, it.y, t.c, 28);
+    if (lives <= 0) die();
+  } else {
+    score += t.pts; burst(it.x, it.y, t.c, it.type === 'bonus' ? 18 : 10);
+  }
+  scoreEl.textContent = score;
+}
+
+const hitTest = it => it.y + 10 >= player.y && it.y - 10 <= player.y + player.h && it.x >= player.x - 8 && it.x <= player.x + player.w + 8;
 
 function update(dt) {
-  elapsed += dt;
-  const dir = (right ? 1 : 0) - (left ? 1 : 0);
-  player.x = Math.max(0, Math.min(W - player.w, player.x + dir * 420 * dt));
-  spawnIn -= dt;
-  if (spawnIn <= 0) { spawn(); spawnIn = Math.max(0.33, 0.7 - elapsed * 0.004); }
-  const fall = 240 + elapsed * 4;
-  items = items.filter(it => {
-    it.y += fall * dt;
-    const hit = it.y + 10 >= player.y && it.y - 10 <= player.y + player.h && it.x >= player.x - 8 && it.x <= player.x + player.w + 8;
-    if (!hit) return it.y < H + 24;
-    const t = TYPES[it.type];
-    let pts = t.pts;
-    if (it.type === 'bomb') {
-      combo = 0; shake = 0.3; flash = 0.35;
-      beep(110, 0.3, 'sawtooth', 0.09);
-    } else {
-      combo++;
-      pts *= mult();
-      player.flash = 0.15;
-      if (it.type === 'bonus') beep(1250, 0.18, 'triangle'); else beep(880 + Math.min(combo, 15) * 25, 0.08, 'sine');
+  const run = state === 'run';
+  if (state === 'count') { cd -= dt; if (cd <= 0) state = 'run'; }
+  if (run) {
+    playTime += dt;
+    const lv = Math.floor(playTime / LEVEL_SECS);
+    if (lv !== level) {
+      level = lv; lvlEl.textContent = 'Level ' + (level + 1); showBanner();
+      for (let i = 0; i < 24; i++) burst(Math.random() * W, 30, rgb(THEMES[level % 6].a), 1);
     }
-    score += pts; scoreEl.textContent = score; showCombo();
-    burst(it.x, player.y, t.c, it.type === 'bomb' ? 26 : 12);
-    texts.push({ x: it.x, y: player.y - 8, life: 0.8, color: t.c, text: (pts > 0 ? '+' : '') + pts });
-    return false;
-  });
-  parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.life -= dt; });
+    const dir = (right ? 1 : 0) - (left ? 1 : 0);
+    player.x = Math.max(0, Math.min(W - player.w, player.x + dir * 420 * dt));
+    spawnIn -= dt;
+    if (spawnIn <= 0) { spawn(); spawnIn = Math.max(.3, .72 - level * .05); }
+  }
+  if (state === 'dying') { dyingT -= dt; if (dyingT <= 0) gameOver(); }
+  if (run || state === 'dying') {
+    const fall = (230 + level * 26) * (run ? 1 : .3);
+    items = items.filter(it => {
+      it.y += fall * dt;
+      if (run && hitTest(it)) { collect(it); return false; }
+      return it.y < H + 20;
+    });
+  }
+  invuln -= dt; flash -= dt; shake -= dt; banner -= dt;
+  parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
   parts = parts.filter(p => p.life > 0);
-  texts.forEach(t => { t.y -= 50 * dt; t.life -= dt; });
-  texts = texts.filter(t => t.life > 0);
-  shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt); player.flash = Math.max(0, player.flash - dt);
+  stars.forEach(s => { s.y += (60 + level * 18) * s.s * dt; if (s.y > H) { s.y = -10; s.x = Math.random() * W; } });
+  const target = THEMES[level % THEMES.length], k = Math.min(1, dt * 2);
+  ['t', 'b', 'a'].forEach(key => cur[key] = cur[key].map((v, i) => v + (target[key][i] - v) * k));
+  root.style.setProperty('--bg1', rgb(cur.t));
+  root.style.setProperty('--bg2', rgb(cur.b));
+  root.style.setProperty('--acc', rgb(cur.a));
 }
 
-/* ---------- drawing ---------- */
-function starShape(x, y, r) {
+function drawItem(it) {
+  const t = TYPES[it.type];
+  ctx.shadowColor = t.c; ctx.shadowBlur = 14; ctx.fillStyle = t.c;
   ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r;
-    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  if (it.type === 'bonus') {
+    ctx.moveTo(it.x, it.y - 14); ctx.lineTo(it.x + 12, it.y); ctx.lineTo(it.x, it.y + 14); ctx.lineTo(it.x - 12, it.y);
+    ctx.closePath();
+  } else ctx.arc(it.x, it.y, 10, 0, Math.PI * 2);
+  ctx.fill(); ctx.shadowBlur = 0;
+  if (it.type === 'coin') { ctx.strokeStyle = '#b57f00'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(it.x, it.y, 6, 0, Math.PI * 2); ctx.stroke(); }
+  if (it.type === 'bomb') {
+    ctx.fillStyle = '#160a2b'; ctx.beginPath(); ctx.arc(it.x, it.y, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.arc(it.x + 7, it.y - 9, 2 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
   }
-  ctx.closePath();
 }
 
-function drawItem(it, t) {
-  const c = TYPES[it.type].c;
-  ctx.shadowColor = c; ctx.shadowBlur = 16;
-  if (it.type === 'coin') {
-    const f = Math.max(0.25, Math.abs(Math.cos(t * 5 + it.seed)));
-    ctx.fillStyle = c;
-    ctx.beginPath(); ctx.ellipse(it.x, it.y, 10 * f, 10, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#b57f00'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(it.x, it.y, 6 * f, 6, 0, 0, Math.PI * 2); ctx.stroke();
-  } else if (it.type === 'bonus') {
-    ctx.fillStyle = c; starShape(it.x, it.y, 14); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#ffffffaa'; starShape(it.x, it.y, 6); ctx.fill();
-  } else {
-    const g = ctx.createRadialGradient(it.x - 3, it.y - 3, 1, it.x, it.y, 11);
-    g.addColorStop(0, '#5a1d4a'); g.addColorStop(1, '#14040f');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(it.x, it.y, 11, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = c; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(it.x, it.y, 11, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = Math.random() > 0.5 ? '#ffc83d' : '#fff';
-    ctx.beginPath(); ctx.arc(it.x + 6, it.y - 12, 2 + Math.random() * 2, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.shadowBlur = 0;
-}
-
-function draw() {
-  const t = performance.now() / 1000;
+function draw(now) {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#1f0e40'); g.addColorStop(1, '#0b0620');
+  g.addColorStop(0, rgb(cur.t)); g.addColorStop(1, rgb(cur.b));
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W / 2, H, 10, W / 2, H, 320);
+  glow.addColorStop(0, rgb(cur.a, .22)); glow.addColorStop(1, rgb(cur.a, 0));
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  ctx.lineWidth = 2; ctx.lineCap = 'round';
   stars.forEach(s => {
-    ctx.globalAlpha = 0.25 + s.z * 0.6;
-    ctx.fillStyle = s.z > 0.8 ? '#3df5e0' : '#fff';
-    ctx.fillRect(s.x, s.y, 1 + s.z * 1.5, 1 + s.z * 1.5);
+    ctx.strokeStyle = rgb(cur.a, .12 + .45 * s.s);
+    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y - (4 + level * 3) * s.s * 2); ctx.stroke();
   });
-  ctx.globalAlpha = 1;
-  /* floor glow */
-  const fg = ctx.createLinearGradient(0, H - 70, 0, H);
-  fg.addColorStop(0, '#3df5e000'); fg.addColorStop(1, '#3df5e033');
-  ctx.fillStyle = fg; ctx.fillRect(0, H - 70, W, 70);
-
   ctx.save();
-  if (shake > 0) ctx.translate((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9);
-  const pg = ctx.createLinearGradient(player.x, 0, player.x + player.w, 0);
-  pg.addColorStop(0, player.flash > 0 ? '#fff' : '#3df5e0'); pg.addColorStop(1, player.flash > 0 ? '#fff' : '#7a7bff');
-  ctx.shadowColor = '#3df5e0'; ctx.shadowBlur = 22; ctx.fillStyle = pg;
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(player.x, player.y, player.w, player.h, 9); else ctx.rect(player.x, player.y, player.w, player.h);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#ffffff66'; ctx.fillRect(player.x + 10, player.y + 3, player.w - 20, 2);
-  items.forEach(it => drawItem(it, t));
-  parts.forEach(p => { ctx.globalAlpha = Math.max(0, p.life * 1.8); ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
-  ctx.globalAlpha = 1;
-  ctx.font = "700 18px 'Chakra Petch', sans-serif"; ctx.textAlign = 'center';
-  texts.forEach(tx => { ctx.globalAlpha = Math.min(1, tx.life * 2); ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y); });
+  if (shake > 0) ctx.translate((Math.random() - .5) * 10 * Math.min(1, shake * 2), (Math.random() - .5) * 10 * Math.min(1, shake * 2));
+  if (state !== 'over' && state !== 'menu' && !(state === 'dying') && !(invuln > 0 && Math.floor(invuln * 14) % 2)) {
+    ctx.shadowColor = rgb(cur.a); ctx.shadowBlur = 20; ctx.fillStyle = rgb(cur.a);
+    ctx.beginPath(); ctx.roundRect(player.x, player.y, player.w, player.h, 9); ctx.fill(); ctx.shadowBlur = 0;
+  }
+  items.forEach(drawItem);
+  parts.forEach(p => { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2)); ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
   ctx.globalAlpha = 1;
   ctx.restore();
-  if (flash > 0) { ctx.fillStyle = `rgba(255,61,127,${flash})`; ctx.fillRect(0, 0, W, H); }
+  if (lives === 1 && (state === 'run' || state === 'count')) {
+    const v = ctx.createRadialGradient(W / 2, H / 2, 180, W / 2, H / 2, 420);
+    v.addColorStop(0, 'rgba(255,40,80,0)'); v.addColorStop(1, `rgba(255,40,80,${.2 + .15 * Math.sin(now / 160)})`);
+    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  }
+  if (flash > 0) { ctx.fillStyle = `rgba(255,50,90,${Math.min(.5, flash * .7)})`; ctx.fillRect(0, 0, W, H); }
+  ctx.textAlign = 'center';
+  if (banner > 0 && state !== 'menu' && state !== 'over') {
+    ctx.globalAlpha = Math.min(1, banner * 1.5);
+    ctx.fillStyle = rgb(cur.a); ctx.font = "700 46px 'Chakra Petch',sans-serif";
+    ctx.fillText('LEVEL ' + (level + 1), W / 2, 220);
+    ctx.fillStyle = '#fff'; ctx.font = "500 20px 'Chakra Petch',sans-serif";
+    ctx.fillText(bannerText, W / 2, 252);
+    ctx.globalAlpha = 1;
+  }
+  if (state === 'count') {
+    const f = cd - Math.floor(cd);
+    ctx.globalAlpha = .4 + .6 * f; ctx.fillStyle = '#fff'; ctx.font = `700 ${90 + 40 * f}px 'Chakra Petch',sans-serif`;
+    ctx.fillText(Math.ceil(cd), W / 2, 300); ctx.globalAlpha = 1;
+  }
 }
 
 function loop(now) {
-  const dt = Math.min((now - last) / 1000, 0.05); last = now;
-  stars.forEach(s => { s.y += (18 + s.z * 50) * dt; if (s.y > H) { s.y = 0; s.x = Math.random() * W; } });
-  if (state === 'run') update(dt);
-  draw();
+  const dt = Math.min((now - last) / 1000, .05); last = now;
+  if (state !== 'paused') update(dt);
+  draw(now);
   requestAnimationFrame(loop);
 }
 
-/* ---------- input ---------- */
+function fit() {
+  const r = stage.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  scale = cv.width / W;
+}
+new ResizeObserver(fit).observe(stage);
+
+const typing = () => ['BUTTON', 'INPUT'].includes(document.activeElement.tagName);
 addEventListener('keydown', e => {
-  const k = e.key.toLowerCase();
-  if (k === 'arrowleft' || k === 'a') left = true;
-  if (k === 'arrowright' || k === 'd') right = true;
-  if (k === 'escape') stop();
-  if (k === 'enter' && state !== 'run' && document.activeElement !== startBtn) start();
+  if (e.key === 'ArrowLeft') left = true;
+  if (e.key === 'ArrowRight') right = true;
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { state === 'run' ? pause() : resume(); }
+  if (e.key === ' ' && !typing()) { e.preventDefault(); state === 'run' ? pause() : resume(); }
+  if (e.key === 'Enter' && !typing() && (state === 'menu' || state === 'over')) startGame();
 });
 addEventListener('keyup', e => {
-  const k = e.key.toLowerCase();
-  if (k === 'arrowleft' || k === 'a') left = false;
-  if (k === 'arrowright' || k === 'd') right = false;
+  if (e.key === 'ArrowLeft') left = false;
+  if (e.key === 'ArrowRight') right = false;
 });
 const hold = (id, fn) => {
   const b = $(id);
@@ -250,10 +266,15 @@ cv.addEventListener('pointermove', e => {
   const r = cv.getBoundingClientRect();
   player.x = Math.max(0, Math.min(W - player.w, (e.clientX - r.left) / r.width * W - player.w / 2));
 });
-startBtn.addEventListener('click', start);
-$('stop').addEventListener('click', stop);
-muteBtn.addEventListener('click', () => { muted = !muted; muteBtn.textContent = muted ? 'Sound off' : 'Sound on'; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+$('start').addEventListener('click', startGame);
+$('again').addEventListener('click', startGame);
+$('change').addEventListener('click', () => { showPanel('menu'); nameIn.focus(); });
+$('resume').addEventListener('click', resume);
+$('quit').addEventListener('click', () => { if (state === 'paused') gameOver(); });
+$('pauseBtn').addEventListener('click', () => { state === 'run' ? pause() : resume(); });
 
 nameIn.value = read(NAME) || '';
-renderBoard();
+renderBoard(); renderHearts(); showPanel('menu');
+fit();
 requestAnimationFrame(t => { last = t; loop(t); });

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Coin Catch</title>
-<meta name="description" content="Catch coins, grab bonuses, dodge bombs. A fast neon arcade game in your browser.">
+<meta name="description" content="Catch coins, grab bonuses, dodge bombs. Three bombs and you are out.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
@@ -12,39 +12,54 @@
 </head>
 <body>
 <div class="app">
-  <section class="game">
+  <main class="game">
     <header class="hud">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
-      <div class="mid"><div id="who" class="who"></div><div id="combo" class="combo"></div></div>
-      <div class="stat"><span>Best</span><b id="best">0</b></div>
-      <div class="btns">
-        <button id="mute" type="button">Sound on</button>
-        <button id="stop" type="button">Stop and save</button>
-      </div>
+      <div class="mid"><span id="lvl">Level 1</span><div id="hearts" aria-label="Lives left"></div></div>
+      <div class="stat r"><span>Best</span><b id="best">0</b></div>
+      <button id="pauseBtn" class="icon" type="button" aria-label="Pause or resume">&#10074;&#10074;</button>
     </header>
-    <div id="wrap" class="wrap">
-      <div id="stage" class="stage">
-        <canvas id="c" aria-label="Coin Catch game"></canvas>
-        <div id="overlay">
-          <h1 id="title">Coin Catch</h1>
-          <p id="sub">Slide the plate. Catch what falls.</p>
+    <div id="stage" class="stage">
+      <canvas id="c" width="400" height="560" aria-label="Coin Catch game"></canvas>
+      <div id="overlay">
+        <section id="menu" class="panel">
+          <h1>Coin Catch</h1>
+          <p>Move the plate and catch what falls.</p>
           <ul class="legend">
             <li><i class="coin"></i>Coin +1</li>
             <li><i class="bonus"></i>Bonus +5</li>
             <li><i class="bomb"></i>Bomb -2</li>
           </ul>
+          <p class="rule">You have 3 lives. Each bomb you catch costs one.</p>
           <input id="name" maxlength="14" placeholder="Your name" autocomplete="off" aria-label="Your name">
-          <button id="start" type="button">Play</button>
-          <small>Arrow keys, A / D, or drag to move. Catch 5 in a row to raise your multiplier.</small>
-          <ol id="list2" class="mini"></ol>
-        </div>
+          <button id="start" class="cta" type="button">Play</button>
+          <small>Arrow keys or drag to move. P pauses.</small>
+        </section>
+        <section id="pause" class="panel" hidden>
+          <h2>Paused</h2>
+          <p>Your game is on hold. Resume starts with a 3 second countdown.</p>
+          <button id="resume" class="cta" type="button">Resume</button>
+          <button id="quit" class="ghost" type="button">End game and save score</button>
+        </section>
+        <section id="over" class="panel over" hidden>
+          <h2 class="glitch" data-text="GAME OVER">GAME OVER</h2>
+          <p class="out">All 3 lives are gone.</p>
+          <div id="badge" class="badge" hidden>New high score!</div>
+          <dl class="sum">
+            <div><dt>Score</dt><dd id="fScore">0</dd></div>
+            <div><dt>Level</dt><dd id="fLevel">1</dd></div>
+            <div><dt>Top 10 rank</dt><dd id="fRank">-</dd></div>
+          </dl>
+          <button id="again" class="cta" type="button">Play again</button>
+          <button id="change" class="ghost" type="button">Change name</button>
+        </section>
       </div>
     </div>
     <div class="pad">
       <button id="left" type="button" aria-label="Move left">&#9664;</button>
       <button id="right" type="button" aria-label="Move right">&#9654;</button>
     </div>
-  </section>
+  </main>
   <aside class="board">
     <h2>Top 10</h2>
     <ol id="list"></ol>

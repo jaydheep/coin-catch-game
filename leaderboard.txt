@@ -1,0 +1,4 @@
+# Leaderboard file. The game reads this file and lists it together with scores from this browser.
+# One player per line, in this format:   name,stages cleared,total stars
+# Lines starting with # are ignored. Example (remove the # to use it):
+# Roshan,12,30

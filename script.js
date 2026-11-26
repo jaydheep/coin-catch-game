@@ -1,18 +1,22 @@
 const W = 400, H = 560, MAX_LIVES = 3, TOTAL = 1000;
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d'), stageEl = $('stage'), root = document.documentElement;
-const PANELS = ['menu', 'stages', 'board', 'pause', 'clear', 'over'];
+const PANELS = ['menu', 'help', 'stages', 'board', 'pause', 'clear', 'over'];
 const ADJ = ['Neon', 'Crystal', 'Ember', 'Frozen', 'Velvet', 'Solar', 'Lunar', 'Jade', 'Cobalt', 'Amber'];
 const NOUN = ['Harbor', 'Canyon', 'Garden', 'Temple', 'Skyline', 'Lagoon', 'Summit', 'Bazaar', 'Reef', 'Citadel'];
 const worldName = w => ADJ[w % 10] + ' ' + NOUN[Math.floor(w / 10) % 10];
-const MISSIONS = ['score', 'coins', 'gems', 'survive', 'dodge', 'combo', 'power', 'clean', 'color', 'boss'];
-const COIN_T = ['coin', 'ice', 'vio'], COLOR_NAMES = ['gold', 'cyan', 'violet'];
+const MISSIONS = ['score', 'sum', 'rule', 'seq', 'math', 'gems', 'survive', 'gauntlet', 'dodge', 'boss'];
+const BRAIN = ['sum', 'rule', 'seq', 'math', 'gauntlet', 'boss'];
+const COIN_T = ['coin', 'ice', 'vio'];
 const TYPES = {
   coin: { c: '#ffc83d', pts: 1, good: 1, coin: 1 }, ice: { c: '#4de1ff', pts: 1, good: 1, coin: 1 }, vio: { c: '#b985ff', pts: 1, good: 1, coin: 1 },
-  gem: { c: '#9dff4d', pts: 5, good: 1 }, bomb: { c: '#ff3d7f' },
+  gem: { c: '#9dff4d', pts: 5, good: 1 }, bomb: { c: '#ff3d7f' }, num: { c: '#efe9ff' },
   shield: { c: '#4dd2ff', g: 'S', pw: 1 }, magnet: { c: '#ff5cf0', g: 'M', pw: 1 }, slow: { c: '#a8ff5c', g: 'T', pw: 1 },
   x2: { c: '#ffd24d', g: 'x2', pw: 1 }, wide: { c: '#ff9a4d', g: 'W', pw: 1 }
 };
+const irand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const isPrime = x => { if (x < 2) return false; for (let i = 2; i * i <= x; i++) if (x % i === 0) return false; return true; };
 
 function hsl(h, s, l) {
   h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
@@ -26,17 +30,41 @@ const rgb = (a, al = 1) => `rgba(${a.map(Math.round).join(',')},${al})`;
 function stageDef(n) {
   const w = Math.floor((n - 1) / 10), i = (n - 1) % 10, m = MISSIONS[i];
   const k = 1 + Math.log2(1 + n / 12), e = 1 - Math.exp(-n / 250);
-  const d = { n, w, i, m, fall: 200 + 260 * e, spawn: .75 - .45 * e, bombP: .14 + .2 * e, gemP: .1, powP: n >= 3 ? .05 : 0, pw: 92 - 22 * e, ci: (n * 7) % 3 };
-  const T = { score: 14 * k, coins: 10 * k, gems: 3 + 1.5 * k, survive: Math.min(60, 15 + 4 * k), dodge: 8 + 3 * k, combo: Math.min(30, 6 + 2.2 * k), power: 2 + .8 * k, clean: 18 * k, color: 6 + 2.5 * k, boss: 30 * k };
-  d.target = Math.round(T[m]);
+  const d = { n, w, i, m, brain: BRAIN.includes(m), fall: 200 + 260 * e, spawn: .75 - .45 * e, bombP: .14 + .2 * e, gemP: .1, powP: n >= 3 ? .05 : 0, pw: 92 - 22 * e };
+  const R = { score: 14 * k, gems: 3 + 1.5 * k, survive: Math.min(60, 15 + 4 * k), dodge: 8 + 3 * k,
+    sum: 3 + Math.min(5, Math.floor(n / 120)), rule: 3 + Math.min(5, Math.floor(n / 110)), seq: 2 + Math.min(4, Math.floor(n / 100)),
+    math: 4 + Math.min(6, Math.floor(n / 90)), gauntlet: 5 + Math.min(7, Math.floor(n / 80)), boss: 8 + Math.min(8, Math.floor(n / 70)) };
+  d.target = Math.round(R[m]);
   if (m === 'gems') d.gemP = .35;
   if (m === 'dodge') { d.bombP += .25; d.spawn *= .85; }
   if (m === 'survive') d.bombP += .1;
-  if (m === 'power') d.powP = .22;
-  if (m === 'boss') { d.fall *= 1.15; d.spawn *= .8; d.bombP += .08; }
+  if (d.brain) { d.fall *= m === 'boss' ? .9 : .72; d.spawn *= 1.1; d.bombP *= m === 'boss' ? .9 : .5; d.gemP = 0; }
   const t = d.target;
-  d.text = { score: `Score ${t} points`, coins: `Catch ${t} coins`, gems: `Collect ${t} gems`, survive: `Survive ${t} seconds`, dodge: `Let ${t} bombs fall past`, combo: `Chain ${t} catches in a row`, power: `Grab ${t} power-ups`, clean: `Score ${t} with no bomb hit`, color: `Catch ${t} ${COLOR_NAMES[d.ci]} coins`, boss: `BOSS: score ${t} points` }[m];
+  d.text = { score: `Score ${t} points`, gems: `Collect ${t} gems`, survive: `Survive ${t} seconds`, dodge: `Let ${t} bombs fall past`, sum: `Solve ${t} sum puzzles`, rule: `Follow the rule for ${t} rounds`, seq: `Repeat the colour order ${t} times`, math: `Answer ${t} quick maths`, gauntlet: `Brain gauntlet: ${t} mixed rounds`, boss: `BOSS: ${t} mixed rounds` }[m];
+  d.hint = { score: 'Catch coins, dodge bombs', gems: 'Gems are worth 5 points', survive: 'Stay alive until the time is up', dodge: 'Do not catch bombs. Let them pass', sum: 'Catch numbers that add up to the exact total', rule: 'Catch only numbers that match the rule', seq: 'Catch coin colours in the shown order', math: 'Catch the number that answers the sum', gauntlet: 'The puzzle type changes every round', boss: 'Mixed puzzles while bombs rain down' }[m];
   return d;
+}
+
+const RULES = [
+  () => ({ t: 'EVEN numbers', f: x => x % 2 === 0 }),
+  () => ({ t: 'ODD numbers', f: x => x % 2 === 1 }),
+  () => ({ t: 'Multiples of 3', f: x => x % 3 === 0 }),
+  () => ({ t: 'PRIME numbers', f: isPrime }),
+  r => { const k = Math.min(irand(4, 10), r - 3); return { t: `Bigger than ${k}`, f: x => x > k }; },
+  r => { const k = Math.min(irand(6, 14), r - 2); return { t: `Smaller than ${k}`, f: x => x < k }; },
+  () => ({ t: 'Multiples of 4', f: x => x % 4 === 0 }),
+  () => ({ t: 'Multiples of 5', f: x => x % 5 === 0 }),
+  () => ({ t: 'SQUARE numbers', f: x => Number.isInteger(Math.sqrt(x)) })
+];
+function genMath(n) {
+  const tier = n < 100 ? 0 : n < 300 ? 1 : 2;
+  const op = pick(tier === 0 ? ['+', '\u2212'] : tier === 1 ? ['+', '\u2212', '\u00D7'] : ['+', '\u2212', '\u00D7', '\u00F7']);
+  let a, b, ans;
+  if (op === '+') { const m = [9, 30, 99][tier]; a = irand(1, m); b = irand(1, m); ans = a + b; }
+  else if (op === '\u2212') { const m = [12, 40, 99][tier]; a = irand(2, m); b = irand(1, a); ans = a - b; }
+  else if (op === '\u00D7') { const m = [0, 6, 12][tier]; a = irand(2, m); b = irand(2, m); ans = a * b; }
+  else { b = irand(2, 12); ans = irand(2, 12); a = b * ans; }
+  return { q: `${a} ${op} ${b} = ?`, ans };
 }
 
 const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
@@ -58,24 +86,40 @@ function sfx(f, d = .08, type = 'sine', v = .05, slide = 0) {
   } catch {}
 }
 
-const player = { x: 150, y: 500, w: 92, h: 18 };
+const player = { x: 154, y: 500, w: 92, h: 18 };
 let def = stageDef(Math.min(save.unlocked, TOTAL)), items = [], parts = [], score = 0, lives = MAX_LIVES, playTime = 0, spawnIn = 0;
-let combo = 0, maxCombo = 0, coins = 0, gems = 0, dodged = 0, powers = 0, colorCnt = 0;
-let shake = 0, flash = 0, invuln = 0, banner = 0, cd = 0, dyingT = 0, T0 = 0, selW = 0;
-let state = 'menu', last = 0, user = '', scale = 1, left = false, right = false;
+let combo = 0, maxCombo = 0, gems = 0, dodged = 0, done = 0, task = null, lastKind = '';
+let shake = 0, flash = 0, invuln = 0, banner = 0, cd = 0, dyingT = 0, T0 = 0, selW = 0, msgT = 0, msgText = '', msgCol = '#fff';
+let state = 'menu', last = 0, user = '', scale = 1, helpFrom = 'menu', uiIdle = null, uiLive = null;
 const timers = { shield: 0, magnet: 0, slow: 0, x2: 0, wide: 0 };
 let cur = themeOf(def.w);
 const amb = Array.from({ length: 50 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: .3 + Math.random() * .7, ph: Math.random() * 6 }));
 
 const totalStars = () => Object.values(save.stars).reduce((a, b) => a + b, 0);
-const prog = () => ({ score, coins, gems, survive: Math.floor(playTime), dodge: dodged, combo: maxCombo, power: powers, clean: score, color: colorCnt, boss: score }[def.m]);
+const unlockedN = () => Math.min(save.unlocked, TOTAL);
+const prog = () => ({ score, gems, survive: Math.floor(playTime), dodge: dodged }[def.m] ?? done);
+const pop = (txt, col) => { msgText = txt; msgCol = col; msgT = 1.4; };
+const dropOld = () => { items = items.filter(it => it.type === 'bomb' || TYPES[it.type].pw); };
 
 function showPanel(id) {
-  $('overlay').classList.remove('hide');
+  const ov = $('overlay');
+  ov.classList.remove('hide'); ov.classList.toggle('home', id === 'menu');
   PANELS.forEach(p => $(p).hidden = p !== id);
-  if (id === 'menu') $('play').textContent = `Play \u00B7 Stage ${Math.min(save.unlocked, TOTAL)}`;
+  if (id === 'menu') homeInfo();
 }
 const hidePanels = () => $('overlay').classList.add('hide');
+
+function homeInfo() {
+  const n = unlockedN();
+  $('play').textContent = `\u25B6  PLAY \u00B7 Stage ${n}`;
+  $('hWorld').textContent = `World ${Math.floor((n - 1) / 10) + 1}: ${worldName(Math.floor((n - 1) / 10))}`;
+  $('hStage').textContent = `${save.cleared}/${TOTAL}`;
+  $('hBar').style.width = (save.cleared / TOTAL * 100) + '%';
+  $('hStars').textContent = `\u2605 ${totalStars()} stars`;
+  $('hClr').textContent = `${save.cleared} cleared`;
+  $('avatar').textContent = ($('name').value.trim()[0] || 'P').toUpperCase();
+  $('sndBtn').textContent = muted ? '\u266A Sound off' : '\u266A Sound on';
+}
 
 function renderHearts() {
   const el = $('hearts'); el.innerHTML = '';
@@ -99,7 +143,7 @@ function renderStages() {
   const g = $('grid'); g.innerHTML = '';
   for (let i = 0; i < 10; i++) {
     const n = selW * 10 + i + 1, b = document.createElement('button');
-    b.type = 'button'; b.className = 'st' + (i === 9 ? ' boss' : '');
+    b.type = 'button'; b.className = 'st' + (BRAIN.includes(MISSIONS[i]) ? ' brain' : '') + (i === 9 ? ' boss' : '');
     const s = save.stars[n] || 0;
     b.innerHTML = `<b>${n}</b><small>${n > save.unlocked ? '\uD83D\uDD12' : '\u2605'.repeat(s) + '\u2606'.repeat(3 - s)}</small>`;
     b.disabled = n > save.unlocked;
@@ -108,12 +152,28 @@ function renderStages() {
   }
   $('wPrev').disabled = selW === 0; $('wNext').disabled = selW >= 99;
 }
-function openStages() { selW = Math.floor((Math.min(save.unlocked, TOTAL) - 1) / 10); renderStages(); showPanel('stages'); }
+function openStages() { selW = Math.floor((unlockedN() - 1) / 10); renderStages(); showPanel('stages'); }
 
-function renderBoard() {
-  const l = $('list'); l.innerHTML = '';
-  if (!board.length) { const li = document.createElement('li'); li.textContent = 'Clear a stage to join the board.'; li.className = 'empty'; l.appendChild(li); return; }
-  board.forEach(s => {
+async function renderBoard() {
+  const l = $('list'); l.innerHTML = '<li class="empty">Loading...</li>';
+  const rows = board.map(x => ({ ...x }));
+  try {
+    const r = await fetch('leaderboard.txt?' + Date.now(), { cache: 'no-store' });
+    if (r.ok) (await r.text()).split(/\r?\n/).forEach(line => {
+      line = line.trim(); if (!line || line[0] === '#') return;
+      const [name, c, s] = line.split(',');
+      if (name && !isNaN(+c)) rows.push({ name: name.trim(), cleared: +c, stars: +s || 0 });
+    });
+  } catch {}
+  const map = new Map();
+  rows.forEach(x => {
+    const k = x.name.toLowerCase(), o = map.get(k);
+    if (!o || x.cleared > o.cleared || (x.cleared === o.cleared && x.stars > o.stars)) map.set(k, x);
+  });
+  const list = [...map.values()].sort((a, b) => b.cleared - a.cleared || b.stars - a.stars).slice(0, 10);
+  l.innerHTML = '';
+  if (!list.length) { l.innerHTML = '<li class="empty">Clear a stage to join the board.</li>'; return; }
+  list.forEach(s => {
     const li = document.createElement('li'); li.textContent = s.name;
     const sp = document.createElement('span'); sp.textContent = `Stage ${s.cleared} \u00B7 ${s.stars}\u2605`;
     li.appendChild(sp); l.appendChild(li);
@@ -128,17 +188,40 @@ function recordBoard() {
   board = board.slice(0, 10); write('cc2-board', board);
 }
 
+function newTask(kind) {
+  const n = def.n; lastKind = kind;
+  if (kind === 'sum') task = { kind, mx: Math.min(9, 3 + Math.floor(n / 50)), target: Math.min(45, 5 + irand(0, 5) + Math.floor(n / 20)), sum: 0, t: 0 };
+  else if (kind === 'rule') {
+    const rmax = Math.min(30, 9 + Math.floor(n / 30)), avail = Math.min(RULES.length, 4 + Math.floor(n / 15));
+    const rule = RULES[irand(0, avail - 1)](rmax), all = Array.from({ length: rmax }, (_, i) => i + 1);
+    task = { kind, rule, got: 0, need: 3, valid: all.filter(rule.f), bad: all.filter(x => !rule.f(x)), t: 0 };
+  } else if (kind === 'seq') task = { kind, seq: Array.from({ length: Math.min(8, 3 + Math.floor(n / 80)) }, () => irand(0, 2)), pos: 0, t: 0 };
+  else task = { kind: 'math', ...genMath(n), t: 0 };
+}
+const kindFor = () => (def.m === 'gauntlet' || def.m === 'boss') ? pick(['sum', 'rule', 'seq', 'math'].filter(x => x !== lastKind)) : def.m;
+
 function startStage(n) {
   user = $('name').value.trim() || 'Player'; write('cc2-name', user);
   def = stageDef(n);
-  items = []; parts = []; score = 0; lives = MAX_LIVES; playTime = 0; spawnIn = .6;
-  combo = maxCombo = coins = gems = dodged = powers = colorCnt = 0;
-  shake = flash = invuln = 0; left = right = false;
+  items = []; parts = []; score = 0; lives = MAX_LIVES; playTime = 0; spawnIn = .6; done = 0; msgT = 0;
+  combo = maxCombo = gems = dodged = 0; shake = flash = invuln = 0;
   Object.keys(timers).forEach(k => timers[k] = 0);
+  lastKind = ''; task = def.brain ? (newTask(kindFor()), task) : null;
   player.w = def.pw; player.x = (W - player.w) / 2;
   renderHearts(); hud(); hidePanels();
-  banner = 2.4; state = 'count'; cd = 2;
+  banner = def.brain ? 3.4 : 2.4; state = 'count'; cd = def.brain ? 3 : 2;
   sfx(440, .12, 'triangle', .05);
+}
+function toMenuState() {
+  state = 'menu'; items = []; parts = []; task = null; def = stageDef(unlockedN());
+  Object.keys(timers).forEach(k => timers[k] = 0);
+  player.w = 92; player.x = (W - 92) / 2; spawnIn = .3; msgT = 0; hud();
+}
+const goHome = () => { toMenuState(); showPanel('menu'); };
+const goStages = () => { toMenuState(); openStages(); };
+function playFlow() {
+  if (!save.seen) { save.seen = true; write('cc2-save', save); helpFrom = 'play'; $('helpGo').textContent = "Got it, let's play"; showPanel('help'); }
+  else startStage(unlockedN());
 }
 
 function pause() { if (state !== 'run') return; state = 'paused'; left = right = false; showPanel('pause'); $('resume').focus(); }
@@ -156,7 +239,7 @@ function gameOver() {
   showPanel('over'); $('retry').focus();
 }
 function clearStage() {
-  state = 'clear';
+  state = 'clear'; items = [];
   const st = lives >= 3 ? 3 : lives === 2 ? 2 : 1;
   save.stars[def.n] = Math.max(save.stars[def.n] || 0, st);
   save.cleared = Math.max(save.cleared, def.n);
@@ -172,14 +255,29 @@ function clearStage() {
 }
 const checkClear = () => { if (state === 'run' && prog() >= def.target) clearStage(); };
 
+function skipSpawn() {
+  if (def.m === 'score') return score + items.reduce((s, it) => s + (TYPES[it.type].good ? TYPES[it.type].pts : 0), 0) >= def.target;
+  if (def.m === 'gems') return gems + items.filter(it => it.type === 'gem').length >= def.target;
+  if (def.m === 'survive') return playTime >= def.target - 1.5;
+  if (def.m === 'dodge') return dodged + items.filter(it => it.type === 'bomb').length >= def.target;
+  return false;
+}
+const add = (type, val = 0) => items.push({ x: 20 + Math.random() * (W - 40), y: -18, type, val, ph: Math.random() * 6 });
 function spawn() {
-  const r = Math.random(); let type;
-  if (r < def.bombP) type = 'bomb';
-  else if (r < def.bombP + def.powP) type = ['shield', 'magnet', 'slow', 'x2', 'wide'][Math.floor(Math.random() * 5)];
-  else if (r < def.bombP + def.powP + def.gemP) type = 'gem';
-  else if (def.m === 'color') type = Math.random() < .45 ? COIN_T[def.ci] : COIN_T[Math.floor(Math.random() * 3)];
-  else { const q = Math.random(); type = q < .6 ? 'coin' : q < .8 ? 'ice' : 'vio'; }
-  items.push({ x: 16 + Math.random() * (W - 32), y: -16, type, ph: Math.random() * 6 });
+  if (skipSpawn()) return;
+  const r = Math.random();
+  if (r < def.bombP) return add('bomb');
+  if (r < def.bombP + def.powP) return add(pick(['shield', 'magnet', 'slow', 'x2', 'wide']));
+  if (def.brain) return spawnBrain();
+  if (r < def.bombP + def.powP + def.gemP) return add('gem');
+  const q = Math.random(); add(q < .6 ? 'coin' : q < .8 ? 'ice' : 'vio');
+}
+function spawnBrain() {
+  const tk = task; let val = 0;
+  if (tk.kind === 'sum') { const need = tk.target - tk.sum; val = need <= tk.mx && Math.random() < .25 ? need : Math.random() < .4 ? irand(1, Math.min(tk.mx, need)) : irand(1, tk.mx); return add('num', val); }
+  if (tk.kind === 'rule') return add('num', Math.random() < .5 ? pick(tk.valid) : pick(tk.bad));
+  if (tk.kind === 'math') { if (Math.random() < .34) val = tk.ans; else do { val = tk.ans + pick([-1, 1]) * irand(1, 6); } while (val < 0 || val === tk.ans); return add('num', val); }
+  add(COIN_T[Math.random() < .4 ? tk.seq[tk.pos] : irand(0, 2)]);
 }
 function burst(x, y, color, n) {
   for (let i = 0; i < n; i++) {
@@ -188,34 +286,90 @@ function burst(x, y, color, n) {
   }
 }
 
+function loseLife(why) {
+  if (invuln > 0) return;
+  lives--; combo = 0; invuln = 1; shake = .35; flash = .35;
+  renderHearts(); sfx(180, .3, 'sawtooth', .08, -120);
+  if (why) pop(why, '#ff6b7d');
+  if (lives <= 0) die();
+}
+function penalty(why) {
+  combo = 0;
+  if (def.n < 20) { flash = .3; sfx(200, .2, 'square', .05); pop(why, '#ff6b7d'); } else loseLife(why);
+}
+function roundDone() {
+  done++; score += 10 * (1 + Math.floor(def.n / 100));
+  burst(player.x + player.w / 2, player.y, rgb(cur.a), 30); sfx(780, .25, 'triangle', .06, 400);
+  if (done >= def.target) return;
+  const kind = kindFor(), changed = kind !== lastKind;
+  newTask(kind); dropOld();
+  pop(changed && (def.m === 'gauntlet' || def.m === 'boss') ? 'NEW PUZZLE!' : 'Correct!', '#9dff4d');
+}
+function brainCatch(it) {
+  const k = task.kind; let ok = false;
+  if (k === 'sum') {
+    task.sum += it.val; burst(it.x, it.y, '#efe9ff', 10); sfx(540 + it.val * 30, .08, 'triangle', .05);
+    if (task.sum === task.target) ok = true;
+    else if (task.sum > task.target) { task.sum = 0; penalty('Too much! Total reset'); }
+  } else if (k === 'rule') {
+    if (task.rule.f(it.val)) { task.got++; burst(it.x, it.y, '#9dff4d', 10); sfx(700 + task.got * 80, .1, 'triangle', .05); if (task.got >= task.need) ok = true; }
+    else { task.got = 0; penalty('Wrong! ' + task.rule.t); }
+  } else if (k === 'math') {
+    if (it.val === task.ans) ok = true; else penalty('Wrong answer');
+  } else {
+    if (COIN_T.indexOf(it.type) === task.seq[task.pos]) { task.pos++; burst(it.x, it.y, TYPES[it.type].c, 10); sfx(600 + task.pos * 60, .1, 'triangle', .05); if (task.pos >= task.seq.length) ok = true; }
+    else { task.pos = 0; penalty('Wrong colour! Start again'); }
+  }
+  if (ok) roundDone();
+}
+
 function collect(it) {
   const t = TYPES[it.type];
   if (it.type === 'bomb') {
     if (timers.shield > 0) { timers.shield = 0; burst(it.x, it.y, '#4dd2ff', 24); sfx(320, .2, 'triangle', .06, 200); return; }
     if (invuln > 0) { burst(it.x, it.y, t.c, 10); return; }
-    lives = def.m === 'clean' ? 0 : lives - 1; combo = 0; invuln = 1; shake = .35; flash = .35;
-    renderHearts(); burst(it.x, it.y, t.c, 28); sfx(180, .3, 'sawtooth', .08, -120);
-    if (lives <= 0) die();
+    burst(it.x, it.y, t.c, 28); loseLife();
   } else if (t.pw) {
     timers[it.type] = it.type === 'shield' ? 999 : it.type === 'wide' ? 10 : 8;
-    powers++; burst(it.x, it.y, t.c, 18); sfx(520, .25, 'triangle', .06, 500);
-  } else {
+    burst(it.x, it.y, t.c, 18); sfx(520, .25, 'triangle', .06, 500);
+  } else if (def.brain && task) brainCatch(it);
+  else {
     combo++; maxCombo = Math.max(maxCombo, combo);
     const mult = 1 + Math.min(4, Math.floor(combo / 5));
     score += t.pts * mult * (timers.x2 > 0 ? 2 : 1);
-    if (t.coin) coins++;
     if (it.type === 'gem') gems++;
-    if (it.type === COIN_T[def.ci]) colorCnt++;
     burst(it.x, it.y, t.c, it.type === 'gem' ? 18 : 10);
     it.type === 'gem' ? sfx(990, .15, 'square', .04) : sfx(620 + Math.min(combo, 20) * 22, .08, 'triangle', .05);
   }
   hud(); checkClear();
 }
-const hitTest = it => it.y + 10 >= player.y && it.y - 10 <= player.y + player.h && it.x >= player.x - 8 && it.x <= player.x + player.w + 8;
+const radius = it => it.type === 'num' ? 16 : 10;
+const hitTest = it => it.y + radius(it) >= player.y && it.y - radius(it) <= player.y + player.h && it.x >= player.x - 8 && it.x <= player.x + player.w + 8;
 
+function demo(dt) {
+  spawnIn -= dt;
+  if (spawnIn <= 0) { spawnIn = .4 + Math.random() * .35; const r = Math.random(); add(r < .2 ? 'bomb' : r < .3 ? 'gem' : pick(COIN_T)); }
+  const c = player.x + player.w / 2; let best = null, tx = W / 2;
+  items.forEach(it => {
+    if (!TYPES[it.type].good || it.y < 40) return;
+    if (items.some(b => b.type === 'bomb' && Math.abs(b.x - it.x) < player.w / 2 + 12 && b.y > it.y - 130 && b.y < player.y)) return;
+    if (!best || it.y > best.y) best = it;
+  });
+  if (best) tx = best.x;
+  items.forEach(b => { if (b.type === 'bomb' && b.y > player.y - 160 && b.y < player.y + 10 && Math.abs(b.x - c) < player.w / 2 + 24) tx = c + (b.x < c ? 1 : -1) * 90; });
+  player.x = Math.max(0, Math.min(W - player.w, player.x + Math.max(-380 * dt, Math.min(380 * dt, tx - c))));
+  items = items.filter(it => {
+    it.y += 170 * dt;
+    if (hitTest(it)) { burst(it.x, it.y, TYPES[it.type].c, it.type === 'bomb' ? 20 : 8); return false; }
+    return it.y < H + 20;
+  });
+}
+
+let left = false, right = false;
 function update(dt) {
   T0 += dt;
   const run = state === 'run';
+  if (state === 'menu') demo(dt);
   if (state === 'count') { cd -= dt; if (cd <= 0) state = 'run'; }
   if (run) {
     playTime += dt;
@@ -227,23 +381,27 @@ function update(dt) {
     spawnIn -= dt;
     if (spawnIn <= 0) { spawn(); spawnIn = def.spawn * (.8 + Math.random() * .4); }
     if (def.m === 'survive') { hud(); checkClear(); }
+    if (def.brain && task) {
+      task.t += dt;
+      if (def.m === 'rule' && def.n >= 100 && task.t > 14) { newTask('rule'); dropOld(); pop('RULE CHANGE!', '#ffc83d'); }
+    }
   }
   if (state === 'dying') { dyingT -= dt; if (dyingT <= 0) gameOver(); }
   if (run || state === 'dying') {
     const fall = def.fall * (run ? (timers.slow > 0 ? .55 : 1) : .3);
     items = items.filter(it => {
       it.y += fall * dt;
-      if (run && timers.magnet > 0 && TYPES[it.type].good) it.x += (player.x + player.w / 2 - it.x) * Math.min(1, dt * 3.5);
+      if (run && !def.brain && timers.magnet > 0 && TYPES[it.type].good) it.x += (player.x + player.w / 2 - it.x) * Math.min(1, dt * 3.5);
       if (run && hitTest(it)) { collect(it); return false; }
       if (it.y >= H + 20) {
-        if (run && TYPES[it.type].good) { if (combo) { combo = 0; } }
+        if (run && TYPES[it.type].good && combo) combo = 0;
         if (run && it.type === 'bomb') { dodged++; hud(); checkClear(); }
         return false;
       }
       return true;
     });
   }
-  invuln -= dt; flash -= dt; shake -= dt; banner -= dt;
+  invuln -= dt; flash -= dt; shake -= dt; banner -= dt; msgT -= dt;
   parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
   parts = parts.filter(p => p.life > 0);
   const st = def.w % 5;
@@ -265,9 +423,14 @@ function update(dt) {
 function drawItem(it) {
   const t = TYPES[it.type];
   ctx.save(); ctx.translate(it.x, it.y);
-  if (def.m === 'color' && it.type === COIN_T[def.ci]) { ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.stroke(); }
   ctx.shadowColor = t.c; ctx.shadowBlur = 14; ctx.fillStyle = t.c;
-  if (t.coin) {
+  if (it.type === 'num') {
+    ctx.shadowColor = rgb(cur.a);
+    ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = rgb(cur.a); ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#160a2b'; ctx.font = `700 ${String(it.val).length > 2 ? 12 : 17}px 'Chakra Petch',sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(it.val, 0, 1);
+  } else if (t.coin) {
     const s = Math.abs(Math.cos(T0 * 3 + it.ph));
     ctx.beginPath(); ctx.ellipse(0, 0, Math.max(2, 10 * s), 10, 0, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(1, 6 * s), 6, 0, 0, 7); ctx.stroke();
@@ -308,6 +471,33 @@ function drawAmb() {
     else { ctx.fillStyle = rgb(cur.a, .3 + .5 * Math.abs(Math.sin(T0 * 4 + a.ph))); ctx.fillRect(a.x, a.y, 2.5, 2.5); }
   });
 }
+function drawTask() {
+  const x = 82, y = 8, w = 236, h = 58, cx = W / 2, k = task.kind;
+  ctx.fillStyle = 'rgba(8,4,24,.66)'; ctx.strokeStyle = rgb(cur.a, .6); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.stroke();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+  if (k === 'sum') {
+    ctx.font = "700 20px 'Chakra Petch',sans-serif"; ctx.fillText(`Make exactly ${task.target}`, cx, y + 19);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.roundRect(x + 16, y + 38, w - 32, 9, 5); ctx.fill();
+    ctx.fillStyle = rgb(cur.a); ctx.beginPath(); ctx.roundRect(x + 16, y + 38, Math.max(9, (w - 32) * task.sum / task.target), 9, 5); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = "700 12px 'Chakra Petch',sans-serif"; ctx.fillText(`${task.sum} / ${task.target}`, cx, y + 53);
+  } else if (k === 'rule') {
+    ctx.font = "700 18px 'Chakra Petch',sans-serif"; ctx.fillText('Catch: ' + task.rule.t, cx, y + 20);
+    for (let i = 0; i < task.need; i++) { ctx.fillStyle = i < task.got ? '#9dff4d' : 'rgba(255,255,255,.25)'; ctx.beginPath(); ctx.arc(cx + (i - (task.need - 1) / 2) * 24, y + 42, 7, 0, 7); ctx.fill(); }
+  } else if (k === 'math') {
+    ctx.font = "700 28px 'Chakra Petch',sans-serif"; ctx.fillText(task.q, cx, y + 30);
+  } else {
+    const L = task.seq.length, hide = def.n >= 200 && task.t > 3;
+    ctx.font = "500 11px 'Chakra Petch',sans-serif"; ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillText(hide ? 'REMEMBER THE ORDER' : 'CATCH IN THIS ORDER', cx, y + 13);
+    for (let i = 0; i < L; i++) {
+      const px = cx + (i - (L - 1) / 2) * 24, hid = hide && i >= task.pos;
+      ctx.fillStyle = hid ? 'rgba(255,255,255,.2)' : TYPES[COIN_T[task.seq[i]]].c; ctx.globalAlpha = i < task.pos ? .45 : 1;
+      ctx.beginPath(); ctx.arc(px, y + 36, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      if (i === task.pos) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, y + 36, 12, 0, 7); ctx.stroke(); }
+      if (hid) { ctx.fillStyle = '#fff'; ctx.font = "700 12px 'Chakra Petch',sans-serif"; ctx.fillText('?', px, y + 37); }
+    }
+  }
+}
 
 function draw(now) {
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -322,7 +512,7 @@ function draw(now) {
   ctx.save();
   if (shake > 0) { const m = 10 * Math.min(1, shake * 2); ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m); }
   const playing = state === 'run' || state === 'count' || state === 'paused';
-  if (playing && !(invuln > 0 && Math.floor(invuln * 14) % 2)) {
+  if ((playing || state === 'menu') && !(invuln > 0 && Math.floor(invuln * 14) % 2)) {
     const pg = ctx.createLinearGradient(0, player.y, 0, player.y + player.h);
     pg.addColorStop(0, '#fff'); pg.addColorStop(.3, rgb(cur.a)); pg.addColorStop(1, rgb(cur.a.map(v => v * .55)));
     ctx.shadowColor = rgb(cur.a); ctx.shadowBlur = 20; ctx.fillStyle = pg;
@@ -348,25 +538,28 @@ function draw(now) {
       ctx.fillStyle = '#160a2b'; ctx.font = "700 11px 'Chakra Petch',sans-serif"; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(TYPES[k].g, 14, y + 8); y += 19;
     });
-    const mult = 1 + Math.min(4, Math.floor(combo / 5));
-    if (combo >= 5) {
+    if (!def.brain && combo >= 5) {
+      const mult = 1 + Math.min(4, Math.floor(combo / 5));
       ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = '#ffc83d'; ctx.font = "700 28px 'Chakra Petch',sans-serif";
       ctx.fillText('x' + mult, W - 10, 34); ctx.fillStyle = '#fff'; ctx.font = "500 12px 'Chakra Petch',sans-serif"; ctx.fillText(combo + ' combo', W - 10, 50);
     }
+    if (def.brain && task) drawTask();
+    if (msgT > 0) { ctx.globalAlpha = Math.min(1, msgT * 2); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = msgCol; ctx.font = "700 24px 'Chakra Petch',sans-serif"; ctx.fillText(msgText, W / 2, 106); ctx.globalAlpha = 1; }
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  if (banner > 0 && state !== 'menu' && state !== 'over' && state !== 'clear') {
+  if (banner > 0 && (state === 'count' || state === 'run')) {
     ctx.globalAlpha = Math.min(1, banner * 1.5);
     ctx.fillStyle = def.m === 'boss' ? '#ff5a6e' : rgb(cur.a); ctx.font = "700 44px 'Chakra Petch',sans-serif";
-    ctx.fillText(def.m === 'boss' ? 'BOSS STAGE ' + def.n : 'STAGE ' + def.n, W / 2, 200);
-    ctx.fillStyle = '#fff'; ctx.font = "500 19px 'Chakra Petch',sans-serif"; ctx.fillText(def.text, W / 2, 234);
-    ctx.fillStyle = 'rgba(255,255,255,.65)'; ctx.font = "500 14px 'Chakra Petch',sans-serif"; ctx.fillText(`World ${def.w + 1} \u00B7 ${worldName(def.w)}`, W / 2, 258);
+    ctx.fillText(def.m === 'boss' ? 'BOSS STAGE ' + def.n : 'STAGE ' + def.n, W / 2, 190);
+    ctx.fillStyle = '#fff'; ctx.font = "500 19px 'Chakra Petch',sans-serif"; ctx.fillText(def.text, W / 2, 224);
+    ctx.fillStyle = '#ffd86b'; ctx.font = "500 15px 'Chakra Petch',sans-serif"; ctx.fillText(def.hint, W / 2, 250);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = "500 13px 'Chakra Petch',sans-serif"; ctx.fillText(`World ${def.w + 1} \u00B7 ${worldName(def.w)}`, W / 2, 275);
     ctx.globalAlpha = 1;
   }
   if (state === 'count') {
     const f = cd - Math.floor(cd);
     ctx.globalAlpha = .4 + .6 * f; ctx.fillStyle = '#fff'; ctx.font = `700 ${90 + 40 * f}px 'Chakra Petch',sans-serif`;
-    ctx.fillText(Math.ceil(cd), W / 2, 340); ctx.globalAlpha = 1;
+    ctx.fillText(Math.ceil(cd), W / 2, 380); ctx.globalAlpha = 1;
   }
 }
 
@@ -374,6 +567,8 @@ function loop(now) {
   const dt = Math.min((now - last) / 1000, .05); last = now;
   if (state !== 'paused') update(dt);
   draw(now);
+  const idle = state === 'menu', live = state === 'run' || state === 'count' || state === 'paused' || state === 'dying';
+  if (idle !== uiIdle || live !== uiLive) { uiIdle = idle; uiLive = live; $('hud').classList.toggle('idle', idle); $('btns').classList.toggle('off', !live); }
   requestAnimationFrame(loop);
 }
 function fit() {
@@ -391,7 +586,7 @@ addEventListener('keydown', e => {
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
   if (e.key === ' ' && !typing()) { e.preventDefault(); togglePause(); }
   if (e.key === 'Enter' && !typing()) {
-    if (state === 'menu') startStage(Math.min(save.unlocked, TOTAL));
+    if (state === 'menu' && !$('menu').hidden) playFlow();
     else if (state === 'clear' && def.n < TOTAL) startStage(def.n + 1);
     else if (state === 'over') startStage(def.n);
   }
@@ -400,12 +595,6 @@ addEventListener('keyup', e => {
   if (e.key === 'ArrowLeft' || e.key === 'a') left = false;
   if (e.key === 'ArrowRight' || e.key === 'd') right = false;
 });
-const hold = (id, fn) => {
-  const b = $(id);
-  b.addEventListener('pointerdown', e => { e.preventDefault(); fn(true); });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => fn(false)));
-};
-hold('left', v => left = v); hold('right', v => right = v);
 const drag = e => {
   if (state !== 'run' && state !== 'count') return;
   const r = cv.getBoundingClientRect();
@@ -416,22 +605,25 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 document.addEventListener('touchmove', e => { if (!e.target.closest('.panel')) e.preventDefault(); }, { passive: false });
 
 const on = (id, fn) => $(id).addEventListener('click', fn);
-on('play', () => startStage(Math.min(save.unlocked, TOTAL)));
-on('openStages', openStages); on('openBoard', () => { renderBoard(); showPanel('board'); });
+const toggleMute = () => { muted = !muted; write('cc2-mute', muted); $('muteBtn').classList.toggle('off', muted); homeInfo(); };
+on('play', playFlow);
+on('howBtn', () => { helpFrom = 'menu'; $('helpGo').textContent = 'Back'; showPanel('help'); });
+on('helpGo', () => { helpFrom === 'play' ? startStage(unlockedN()) : showPanel('menu'); });
+on('openStages', openStages); on('openBoard', () => { showPanel('board'); renderBoard(); });
 on('bdBack', () => showPanel('menu')); on('stBack', () => showPanel('menu'));
 on('wPrev', () => { selW = Math.max(0, selW - 1); renderStages(); });
 on('wNext', () => { selW = Math.min(99, selW + 1); renderStages(); });
-on('wCur', () => { selW = Math.floor((Math.min(save.unlocked, TOTAL) - 1) / 10); renderStages(); });
+on('wCur', () => { selW = Math.floor((unlockedN() - 1) / 10); renderStages(); });
 on('resume', resume); on('restart', () => startStage(def.n));
-on('pauseStages', () => { state = 'menu'; openStages(); });
+on('pauseStages', goStages); on('pauseHome', goHome);
 on('next', () => startStage(def.n + 1)); on('replay', () => startStage(def.n));
-on('clStages', () => { state = 'menu'; openStages(); });
-on('retry', () => startStage(def.n));
-on('ovStages', () => { state = 'menu'; openStages(); });
-on('pauseBtn', togglePause);
-on('muteBtn', () => { muted = !muted; write('cc2-mute', muted); $('muteBtn').classList.toggle('off', muted); });
+on('clStages', goStages); on('clHome', goHome);
+on('retry', () => startStage(def.n)); on('ovStages', goStages); on('ovHome', goHome);
+on('pauseBtn', togglePause); on('muteBtn', toggleMute); on('sndBtn', toggleMute);
+$('name').addEventListener('input', homeInfo);
 
 $('name').value = read('cc2-name') || '';
 $('muteBtn').classList.toggle('off', muted);
+player.w = 92; player.x = (W - 92) / 2;
 renderHearts(); hud(); showPanel('menu'); fit();
 requestAnimationFrame(t => { last = t; loop(t); });

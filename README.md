@@ -1,25 +1,27 @@
 # Coin Catch
 
-An arcade game with **1000 stages**. Every stage has its own mission, and every 10 stages you enter a new world with a new colour theme and a new weather effect. Stage 10 of each world is a boss stage.
+An arcade game with **1000 stages** that mixes reflexes with brain puzzles. Every 10 stages you enter a new world with its own colours and weather. Stage 10 of each world is a boss stage.
 
-## Missions
-Score points, catch coins, collect gems, survive, let bombs fall past, chain catches, grab power-ups, score with no hit, catch one coin colour, and boss stages. Missions repeat in a cycle of 10, and targets and speed grow as the stage number goes up.
+## Stage types (repeat every 10 stages)
+- Action: score points, collect gems, survive, let bombs fall past.
+- Brain: **sum** (catch numbers that add up to an exact total), **rule** (catch only numbers that match a rule such as even, prime or multiples of 3), **colour order** (catch coins in a shown order), **maths** (catch the answer), **gauntlet** (puzzle type changes every round) and the **boss** (mixed puzzles while bombs fall).
+- Wrong catches cost a life from stage 20. From stage 100 the rule changes during the stage, and from stage 200 the colour order is hidden after a few seconds.
 
 ## Rules
-- Coin +1, gem +5, bomb -2 and one life. You have 3 lives per stage.
-- Combo: every 5 catches in a row raises the score multiplier, up to x5. Missing a coin resets it.
+- 3 lives per stage. Clear a stage with 3 lives for 3 stars.
 - Power-ups: S shield, M magnet, T slow motion, x2 double points, W wide plate.
-- Clear a stage with 3 lives for 3 stars. Replay to improve your stars.
+- When the mission is complete, the stage stops and nothing more falls.
 
 ## Controls
-Drag on the screen, arrow keys or A / D, or the on-screen buttons on touch devices. P, Esc or Space pauses. Resume gives a 3 second countdown.
+Drag on the screen, or use the arrow keys / A and D. P, Esc or Space pauses. The pause button only shows while playing.
 
-Progress, stars and the leaderboard are saved in the browser (localStorage). The page is locked to one screen, so it does not scroll on phones.
+## Leaderboard
+The list shows the players written in `leaderboard.txt` together with the scores saved in the browser. A static site cannot write to a file, so to add a player to the shared list, add a line to `leaderboard.txt` in the repo (`name,stages cleared,stars`) and push. A live shared board needs a database.
 
-Plain HTML, CSS and JavaScript, so there is no build step.
+Progress is saved in the browser (localStorage). Plain HTML, CSS and JavaScript, so there is no build step.
 
 ## Run locally
-Open `index.html`, or run `python -m http.server` and visit http://localhost:8000.
+Run `python -m http.server` and visit http://localhost:8000.
 
 ## Deploy
 Import this repo in Vercel with the **Other** framework preset. Leave the build command empty.

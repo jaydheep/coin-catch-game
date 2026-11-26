@@ -1,7 +1,7 @@
-const W = 400, H = 560, MAX_LIVES = 3, TOTAL = 1000;
+const W = 400, H = 560, TOTAL = 1000;
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d'), stageEl = $('stage'), root = document.documentElement;
-const PANELS = ['menu', 'help', 'stages', 'board', 'pause', 'clear', 'over'];
+const PANELS = ['menu', 'help', 'stages', 'board', 'settings', 'pause', 'clear', 'over'];
 const ADJ = ['Neon', 'Crystal', 'Ember', 'Frozen', 'Velvet', 'Solar', 'Lunar', 'Jade', 'Cobalt', 'Amber'];
 const NOUN = ['Harbor', 'Canyon', 'Garden', 'Temple', 'Skyline', 'Lagoon', 'Summit', 'Bazaar', 'Reef', 'Citadel'];
 const worldName = w => ADJ[w % 10] + ' ' + NOUN[Math.floor(w / 10) % 10];
@@ -71,23 +71,57 @@ const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { 
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const save = read('cc2-save') || { unlocked: 1, cleared: 0, stars: {} };
 let board = read('cc2-board') || [];
-let muted = read('cc2-mute') === true, ac = null;
+const DEF_S = { diff: 'normal', hints: true, assist: false, sound: true, music: true, vol: 70, vibrate: true, ctrl: 'direct', plate: 'auto', quality: 'high', shake: true, cblind: false };
+const S = { ...DEF_S, ...(read('cc2-settings') || {}) };
+const saveS = () => write('cc2-settings', S);
+const DIFF = { easy: { lives: 5, speed: .82, pen: 999, bomb: .75 }, normal: { lives: 3, speed: 1, pen: 20, bomb: 1 }, hard: { lives: 2, speed: 1.15, pen: 1, bomb: 1.2 } };
+const PLATE_COLS = { cyan: [61, 245, 224], gold: [255, 200, 61], pink: [255, 92, 170], lime: [157, 255, 77] };
+const plateCol = () => PLATE_COLS[S.plate] || cur.a;
+const GB = v => S.quality === 'high' ? v : 0;
+const vib = p => { if (S.vibrate && navigator.vibrate) { try { navigator.vibrate(p); } catch {} } };
+let ac = null, maxLives = 3, mNext = 0, mStep = 0;
 
+function audio() {
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch {}
+  return ac;
+}
 function sfx(f, d = .08, type = 'sine', v = .05, slide = 0) {
-  if (muted) return;
+  if (!S.sound || S.vol <= 0 || !audio()) return;
   try {
-    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === 'suspended') ac.resume();
     const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
     o.type = type; o.frequency.setValueAtTime(f, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    g.gain.setValueAtTime(v * S.vol / 70, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
     o.connect(g); g.connect(ac.destination); o.start(); o.stop(t + d);
+  } catch {}
+}
+function mnote(f, t, d, type, v) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d + .02);
+}
+function music() {
+  if (!S.sound || !S.music || S.vol <= 0 || !ac || ac.state !== 'running') return;
+  if (!(state === 'run' || state === 'count' || state === 'menu' || state === 'dying')) { mNext = 0; return; }
+  const t0 = ac.currentTime; if (mNext < t0) mNext = t0 + .05;
+  const danger = state === 'run' && lives === 1 ? 16 : 0;
+  const bpm = state === 'menu' ? 84 : 98 + Math.min(40, def.n * .1) + danger, dur = 60 / bpm / 2, vol = .028 * S.vol / 70;
+  const root = 45 + (def.w * 3) % 12, f = m => 440 * Math.pow(2, (m - 69) / 12);
+  const SC = [0, 3, 5, 7, 10, 12, 10, 7], PAT = [0, 2, 4, 2, 5, 4, 3, 1];
+  try {
+    while (mNext < t0 + .3) {
+      const st = mStep % 16;
+      if (st % 4 === 0) mnote(f(root - (st === 8 ? 5 : 0)), mNext, dur * 3.5, 'triangle', vol * 2.2);
+      mnote(f(root + 12 + SC[(PAT[st % 8] + (st >= 8 ? 2 : 0)) % 8]), mNext, dur * .9, 'square', vol * .6);
+      if (def.n >= 50 && st % 2 === 1) mnote(f(root + 24 + SC[PAT[(st + 3) % 8]]), mNext, dur * .5, 'sine', vol * .5);
+      mNext += dur; mStep++;
+    }
   } catch {}
 }
 
 const player = { x: 154, y: 500, w: 92, h: 18 };
-let def = stageDef(Math.min(save.unlocked, TOTAL)), items = [], parts = [], score = 0, lives = MAX_LIVES, playTime = 0, spawnIn = 0;
+let def = stageDef(Math.min(save.unlocked, TOTAL)), items = [], parts = [], score = 0, lives = 3, playTime = 0, spawnIn = 0;
 let combo = 0, maxCombo = 0, gems = 0, dodged = 0, done = 0, task = null, lastKind = '';
 let shake = 0, flash = 0, invuln = 0, banner = 0, cd = 0, dyingT = 0, T0 = 0, selW = 0, msgT = 0, msgText = '', msgCol = '#fff';
 let state = 'menu', last = 0, user = '', scale = 1, helpFrom = 'menu', uiIdle = null, uiLive = null;
@@ -118,12 +152,11 @@ function homeInfo() {
   $('hStars').textContent = `\u2605 ${totalStars()} stars`;
   $('hClr').textContent = `${save.cleared} cleared`;
   $('avatar').textContent = ($('name').value.trim()[0] || 'P').toUpperCase();
-  $('sndBtn').textContent = muted ? '\u266A Sound off' : '\u266A Sound on';
 }
 
 function renderHearts() {
   const el = $('hearts'); el.innerHTML = '';
-  for (let i = 0; i < MAX_LIVES; i++) {
+  for (let i = 0; i < maxLives; i++) {
     const h = document.createElement('i'); h.textContent = '\u2665';
     if (i >= lives) h.className = 'lost';
     el.appendChild(h);
@@ -203,7 +236,8 @@ const kindFor = () => (def.m === 'gauntlet' || def.m === 'boss') ? pick(['sum', 
 function startStage(n) {
   user = $('name').value.trim() || 'Player'; write('cc2-name', user);
   def = stageDef(n);
-  items = []; parts = []; score = 0; lives = MAX_LIVES; playTime = 0; spawnIn = .6; done = 0; msgT = 0;
+  const D = DIFF[S.diff] || DIFF.normal; maxLives = D.lives; def.fall *= D.speed; def.spawn /= D.speed; def.bombP *= D.bomb; aimX = null;
+  items = []; parts = []; score = 0; lives = maxLives; playTime = 0; spawnIn = .6; done = 0; msgT = 0;
   combo = maxCombo = gems = dodged = 0; shake = flash = invuln = 0;
   Object.keys(timers).forEach(k => timers[k] = 0);
   lastKind = ''; task = def.brain ? (newTask(kindFor()), task) : null;
@@ -231,7 +265,7 @@ function die() {
   state = 'dying'; dyingT = 1.4; shake = .7; flash = .8;
   const x = player.x + player.w / 2;
   burst(x, player.y, '#ff3d7f', 40); burst(x, player.y, '#ffb048', 40); burst(x, player.y, '#ffffff', 20);
-  sfx(220, .9, 'sawtooth', .08, -170);
+  sfx(220, .9, 'sawtooth', .08, -170); vib([200]);
 }
 function gameOver() {
   state = 'over'; items = [];
@@ -240,7 +274,7 @@ function gameOver() {
 }
 function clearStage() {
   state = 'clear'; items = [];
-  const st = lives >= 3 ? 3 : lives === 2 ? 2 : 1;
+  const lost = maxLives - lives, st = lost === 0 ? 3 : lost === 1 ? 2 : 1;
   save.stars[def.n] = Math.max(save.stars[def.n] || 0, st);
   save.cleared = Math.max(save.cleared, def.n);
   save.unlocked = Math.max(save.unlocked, Math.min(TOTAL, def.n + 1));
@@ -251,7 +285,7 @@ function clearStage() {
   $('next').disabled = def.n >= TOTAL;
   for (let i = 0; i < 60; i++) burst(Math.random() * W, 120 + Math.random() * 200, rgb(cur.a), 1);
   [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => sfx(f, .2, 'triangle', .06), i * 110));
-  showPanel('clear'); $('next').focus();
+  vib([30, 40, 30]); showPanel('clear'); $('next').focus();
 }
 const checkClear = () => { if (state === 'run' && prog() >= def.target) clearStage(); };
 
@@ -280,6 +314,7 @@ function spawnBrain() {
   add(COIN_T[Math.random() < .4 ? tk.seq[tk.pos] : irand(0, 2)]);
 }
 function burst(x, y, color, n) {
+  n = S.quality === 'high' ? n : Math.ceil(n / 2);
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 190;
     parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: .5 + Math.random() * .5, color });
@@ -289,13 +324,13 @@ function burst(x, y, color, n) {
 function loseLife(why) {
   if (invuln > 0) return;
   lives--; combo = 0; invuln = 1; shake = .35; flash = .35;
-  renderHearts(); sfx(180, .3, 'sawtooth', .08, -120);
+  renderHearts(); sfx(180, .3, 'sawtooth', .08, -120); vib(60);
   if (why) pop(why, '#ff6b7d');
   if (lives <= 0) die();
 }
 function penalty(why) {
   combo = 0;
-  if (def.n < 20) { flash = .3; sfx(200, .2, 'square', .05); pop(why, '#ff6b7d'); } else loseLife(why);
+  if (def.n < (DIFF[S.diff] || DIFF.normal).pen) { flash = .3; sfx(200, .2, 'square', .05); vib(40); pop(why, '#ff6b7d'); } else loseLife(why);
 }
 function roundDone() {
   done++; score += 10 * (1 + Math.floor(def.n / 100));
@@ -365,7 +400,7 @@ function demo(dt) {
   });
 }
 
-let left = false, right = false;
+let left = false, right = false, aimX = null;
 function update(dt) {
   T0 += dt;
   const run = state === 'run';
@@ -376,7 +411,11 @@ function update(dt) {
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
     const tw = def.pw * (timers.wide > 0 ? 1.5 : 1);
     player.w += (tw - player.w) * Math.min(1, dt * 10);
-    player.x = Math.max(0, Math.min(W - player.w, player.x + dir * 440 * dt));
+    if (dir) aimX = null;
+    player.x += dir * 440 * dt;
+    if (aimX !== null) player.x += (aimX - player.x) * (S.ctrl === 'direct' ? 1 : Math.min(1, dt * 12));
+    player.x = Math.max(0, Math.min(W - player.w, player.x));
+    if (combo >= 10 && !def.brain && Math.random() < .6) parts.push({ x: player.x + Math.random() * player.w, y: player.y + player.h, vx: (Math.random() - .5) * 30, vy: 60 + Math.random() * 90, life: .35, color: rgb(plateCol(), .9) });
     Object.keys(timers).forEach(k => { if (k !== 'shield' && timers[k] > 0) timers[k] = Math.max(0, timers[k] - dt); });
     spawnIn -= dt;
     if (spawnIn <= 0) { spawn(); spawnIn = def.spawn * (.8 + Math.random() * .4); }
@@ -405,7 +444,7 @@ function update(dt) {
   parts.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
   parts = parts.filter(p => p.life > 0);
   const st = def.w % 5;
-  amb.forEach(a => {
+  amb.slice(0, S.quality === 'high' ? 50 : 20).forEach(a => {
     if (st === 0) a.y += (90 + def.fall * .3) * a.s * dt;
     else if (st === 1) { a.y += (320 + a.s * 200) * dt; a.x -= 50 * dt; }
     else if (st === 2) { a.y += (40 + 40 * a.s) * dt; a.x += Math.sin(T0 + a.ph) * 22 * dt; }
@@ -420,10 +459,26 @@ function update(dt) {
   root.style.setProperty('--bg1', rgb(cur.t)); root.style.setProperty('--bg2', rgb(cur.b)); root.style.setProperty('--acc', rgb(cur.a));
 }
 
+function sym(i, x, y, r, col) {
+  ctx.fillStyle = col; ctx.beginPath();
+  if (i === 0) ctx.arc(x, y, r * .7, 0, 7);
+  else if (i === 1) { ctx.moveTo(x, y - r); ctx.lineTo(x + r, y + r * .8); ctx.lineTo(x - r, y + r * .8); ctx.closePath(); }
+  else ctx.rect(x - r * .8, y - r * .8, r * 1.6, r * 1.6);
+  ctx.fill();
+}
+function isRight(it) {
+  if (!def.brain || !task) return false;
+  const k = task.kind;
+  if (k === 'sum') return it.type === 'num' && it.val <= task.target - task.sum;
+  if (k === 'rule') return it.type === 'num' && task.rule.f(it.val);
+  if (k === 'math') return it.type === 'num' && it.val === task.ans;
+  return COIN_T.indexOf(it.type) === task.seq[task.pos];
+}
 function drawItem(it) {
   const t = TYPES[it.type];
   ctx.save(); ctx.translate(it.x, it.y);
-  ctx.shadowColor = t.c; ctx.shadowBlur = 14; ctx.fillStyle = t.c;
+  if (S.assist && state === 'run' && isRight(it)) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+  ctx.shadowColor = t.c; ctx.shadowBlur = GB(14); ctx.fillStyle = t.c;
   if (it.type === 'num') {
     ctx.shadowColor = rgb(cur.a);
     ctx.beginPath(); ctx.arc(0, 0, 16, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
@@ -434,6 +489,7 @@ function drawItem(it) {
     const s = Math.abs(Math.cos(T0 * 3 + it.ph));
     ctx.beginPath(); ctx.ellipse(0, 0, Math.max(2, 10 * s), 10, 0, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
     ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 0, Math.max(1, 6 * s), 6, 0, 0, 7); ctx.stroke();
+    if (S.cblind) sym(COIN_T.indexOf(it.type), 0, 0, 5, 'rgba(0,0,0,.6)');
   } else if (it.type === 'gem') {
     ctx.rotate(Math.sin(T0 * 3 + it.ph) * .3);
     ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(12, 0); ctx.lineTo(0, 14); ctx.lineTo(-12, 0); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
@@ -463,7 +519,7 @@ function drawHills() {
 }
 function drawAmb() {
   const st = def.w % 5;
-  amb.forEach(a => {
+  amb.slice(0, S.quality === 'high' ? 50 : 20).forEach(a => {
     if (st === 0) { ctx.strokeStyle = rgb(cur.a, .12 + .45 * a.s); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x, a.y - 10 * a.s - 4); ctx.stroke(); }
     else if (st === 1) { ctx.strokeStyle = rgb(cur.a, .3 * a.s + .1); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(a.x + 4, a.y - 16 * a.s - 6); ctx.stroke(); }
     else if (st === 2) { ctx.fillStyle = `rgba(255,255,255,${.25 + .4 * a.s})`; ctx.beginPath(); ctx.arc(a.x, a.y, 1 + 2 * a.s, 0, 7); ctx.fill(); }
@@ -493,6 +549,7 @@ function drawTask() {
       const px = cx + (i - (L - 1) / 2) * 24, hid = hide && i >= task.pos;
       ctx.fillStyle = hid ? 'rgba(255,255,255,.2)' : TYPES[COIN_T[task.seq[i]]].c; ctx.globalAlpha = i < task.pos ? .45 : 1;
       ctx.beginPath(); ctx.arc(px, y + 36, 9, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+      if (S.cblind && !hid) sym(task.seq[i], px, y + 36, 6, 'rgba(0,0,0,.6)');
       if (i === task.pos) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, y + 36, 12, 0, 7); ctx.stroke(); }
       if (hid) { ctx.fillStyle = '#fff'; ctx.font = "700 12px 'Chakra Petch',sans-serif"; ctx.fillText('?', px, y + 37); }
     }
@@ -510,14 +567,14 @@ function draw(now) {
   ctx.lineCap = 'round';
   drawAmb(); drawHills();
   ctx.save();
-  if (shake > 0) { const m = 10 * Math.min(1, shake * 2); ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m); }
+  if (shake > 0 && S.shake) { const m = 10 * Math.min(1, shake * 2); ctx.translate((Math.random() - .5) * m, (Math.random() - .5) * m); }
   const playing = state === 'run' || state === 'count' || state === 'paused';
   if ((playing || state === 'menu') && !(invuln > 0 && Math.floor(invuln * 14) % 2)) {
-    const pg = ctx.createLinearGradient(0, player.y, 0, player.y + player.h);
-    pg.addColorStop(0, '#fff'); pg.addColorStop(.3, rgb(cur.a)); pg.addColorStop(1, rgb(cur.a.map(v => v * .55)));
-    ctx.shadowColor = rgb(cur.a); ctx.shadowBlur = 20; ctx.fillStyle = pg;
+    const pc = plateCol(), pg = ctx.createLinearGradient(0, player.y, 0, player.y + player.h);
+    pg.addColorStop(0, '#fff'); pg.addColorStop(.3, rgb(pc)); pg.addColorStop(1, rgb(pc.map(v => v * .55)));
+    ctx.shadowColor = rgb(pc); ctx.shadowBlur = GB(combo >= 10 ? 36 : 20); ctx.fillStyle = pg;
     ctx.beginPath(); ctx.roundRect(player.x, player.y, player.w, player.h, 9); ctx.fill(); ctx.shadowBlur = 0;
-    if (timers.shield > 0) { ctx.strokeStyle = '#4dd2ff'; ctx.lineWidth = 3; ctx.shadowColor = '#4dd2ff'; ctx.shadowBlur = 16; ctx.beginPath(); ctx.ellipse(player.x + player.w / 2, player.y + 9, player.w / 2 + 12, 24, 0, 0, 7); ctx.stroke(); ctx.shadowBlur = 0; }
+    if (timers.shield > 0) { ctx.strokeStyle = '#4dd2ff'; ctx.lineWidth = 3; ctx.shadowColor = '#4dd2ff'; ctx.shadowBlur = GB(16); ctx.beginPath(); ctx.ellipse(player.x + player.w / 2, player.y + 9, player.w / 2 + 12, 24, 0, 0, 7); ctx.stroke(); ctx.shadowBlur = 0; }
   }
   items.forEach(drawItem);
   parts.forEach(p => { ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2)); ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 3, 3); });
@@ -552,7 +609,7 @@ function draw(now) {
     ctx.fillStyle = def.m === 'boss' ? '#ff5a6e' : rgb(cur.a); ctx.font = "700 44px 'Chakra Petch',sans-serif";
     ctx.fillText(def.m === 'boss' ? 'BOSS STAGE ' + def.n : 'STAGE ' + def.n, W / 2, 190);
     ctx.fillStyle = '#fff'; ctx.font = "500 19px 'Chakra Petch',sans-serif"; ctx.fillText(def.text, W / 2, 224);
-    ctx.fillStyle = '#ffd86b'; ctx.font = "500 15px 'Chakra Petch',sans-serif"; ctx.fillText(def.hint, W / 2, 250);
+    ctx.fillStyle = '#ffd86b'; ctx.font = "500 15px 'Chakra Petch',sans-serif"; if (S.hints) ctx.fillText(def.hint, W / 2, 250);
     ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = "500 13px 'Chakra Petch',sans-serif"; ctx.fillText(`World ${def.w + 1} \u00B7 ${worldName(def.w)}`, W / 2, 275);
     ctx.globalAlpha = 1;
   }
@@ -566,7 +623,7 @@ function draw(now) {
 function loop(now) {
   const dt = Math.min((now - last) / 1000, .05); last = now;
   if (state !== 'paused') update(dt);
-  draw(now);
+  draw(now); music();
   const idle = state === 'menu', live = state === 'run' || state === 'count' || state === 'paused' || state === 'dying';
   if (idle !== uiIdle || live !== uiLive) { uiIdle = idle; uiLive = live; $('hud').classList.toggle('idle', idle); $('btns').classList.toggle('off', !live); }
   requestAnimationFrame(loop);
@@ -598,14 +655,80 @@ addEventListener('keyup', e => {
 const drag = e => {
   if (state !== 'run' && state !== 'count') return;
   const r = cv.getBoundingClientRect();
-  player.x = Math.max(0, Math.min(W - player.w, (e.clientX - r.left) / r.width * W - player.w / 2));
+  aimX = Math.max(0, Math.min(W - player.w, (e.clientX - r.left) / r.width * W - player.w / 2));
+  if (state === 'count' || S.ctrl === 'direct') player.x = aimX;
 };
 cv.addEventListener('pointermove', drag); cv.addEventListener('pointerdown', drag);
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 document.addEventListener('touchmove', e => { if (!e.target.closest('.panel')) e.preventDefault(); }, { passive: false });
 
+const SCHEMA = [
+  { h: 'Gameplay' },
+  { k: 'diff', l: 'Difficulty', t: 'seg', o: [['easy', 'Chill'], ['normal', 'Normal'], ['hard', 'Hard']], d: 'Chill: 5 lives, slower. Normal: 3 lives. Hard: 2 lives, faster, and wrong puzzle catches cost a life from stage 1. Applies when a stage starts.' },
+  { k: 'assist', l: 'Puzzle assist', t: 'tog', d: 'Draws a dashed ring around the correct item in brain stages.' },
+  { k: 'hints', l: 'Stage hints', t: 'tog' },
+  { h: 'Sound' },
+  { k: 'sound', l: 'Sound', t: 'tog' },
+  { k: 'music', l: 'Music', t: 'tog' },
+  { k: 'vol', l: 'Volume', t: 'range' },
+  { k: 'vibrate', l: 'Vibration', t: 'tog' },
+  { h: 'Controls' },
+  { k: 'ctrl', l: 'Plate movement', t: 'seg', o: [['direct', 'Direct'], ['smooth', 'Smooth']] },
+  { h: 'Look' },
+  { k: 'plate', l: 'Plate colour', t: 'seg', o: [['auto', 'Auto'], ['cyan', 'Cyan'], ['gold', 'Gold'], ['pink', 'Pink'], ['lime', 'Lime']] },
+  { k: 'quality', l: 'Effects', t: 'seg', o: [['high', 'High'], ['low', 'Low']] },
+  { k: 'shake', l: 'Screen shake', t: 'tog' },
+  { k: 'cblind', l: 'Colour-blind symbols', t: 'tog', d: 'Adds a circle, triangle or square to each coin colour.' },
+  { h: 'Progress' },
+  { t: 'btn', l: 'Reset all progress' }
+];
+let setFrom = 'menu', resetArm = 0;
+function syncMute() { $('muteBtn').classList.toggle('off', !S.sound); }
+function resetProgress() {
+  save.unlocked = 1; save.cleared = 0; save.stars = {}; write('cc2-save', save);
+  board = []; write('cc2-board', board); homeInfo();
+}
+function renderSettings() {
+  const panel = $('settings'), sc = panel.scrollTop, box = $('setList'); box.innerHTML = '';
+  SCHEMA.forEach(r => {
+    if (r.h) { const h = document.createElement('div'); h.className = 'sh'; h.textContent = r.h; box.appendChild(h); return; }
+    const row = document.createElement('div'); row.className = 'sr';
+    if (r.t === 'btn') {
+      row.className = 'sr full';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'danger'; b.textContent = resetArm ? 'Tap again to confirm' : r.l;
+      b.addEventListener('click', () => {
+        if (!resetArm) { resetArm = 1; renderSettings(); setTimeout(() => { resetArm = 0; if (!panel.hidden) renderSettings(); }, 3000); }
+        else { resetArm = 0; resetProgress(); renderSettings(); }
+      });
+      row.appendChild(b); box.appendChild(row); return;
+    }
+    const lab = document.createElement('span'); lab.textContent = r.l; row.appendChild(lab);
+    if (r.t === 'seg') {
+      const g = document.createElement('div'); g.className = 'seg';
+      r.o.forEach(([v, t]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = t; if (S[r.k] === v) b.className = 'on';
+        b.addEventListener('click', () => { S[r.k] = v; saveS(); renderSettings(); });
+        g.appendChild(b);
+      });
+      row.appendChild(g);
+    } else if (r.t === 'tog') {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sw' + (S[r.k] ? ' on' : ''); b.setAttribute('aria-pressed', S[r.k]);
+      b.addEventListener('click', () => { S[r.k] = !S[r.k]; saveS(); syncMute(); renderSettings(); });
+      row.appendChild(b);
+    } else {
+      const i = document.createElement('input'); i.type = 'range'; i.min = 0; i.max = 100; i.value = S[r.k];
+      i.addEventListener('input', () => { S[r.k] = +i.value; saveS(); });
+      i.addEventListener('change', () => sfx(660, .12, 'triangle', .06));
+      row.appendChild(i);
+    }
+    box.appendChild(row);
+    if (r.d) { const d = document.createElement('small'); d.textContent = r.d; box.appendChild(d); }
+  });
+  panel.scrollTop = sc;
+}
+
 const on = (id, fn) => $(id).addEventListener('click', fn);
-const toggleMute = () => { muted = !muted; write('cc2-mute', muted); $('muteBtn').classList.toggle('off', muted); homeInfo(); };
+const toggleMute = () => { S.sound = !S.sound; saveS(); syncMute(); };
 on('play', playFlow);
 on('howBtn', () => { helpFrom = 'menu'; $('helpGo').textContent = 'Back'; showPanel('help'); });
 on('helpGo', () => { helpFrom === 'play' ? startStage(unlockedN()) : showPanel('menu'); });
@@ -619,11 +742,15 @@ on('pauseStages', goStages); on('pauseHome', goHome);
 on('next', () => startStage(def.n + 1)); on('replay', () => startStage(def.n));
 on('clStages', goStages); on('clHome', goHome);
 on('retry', () => startStage(def.n)); on('ovStages', goStages); on('ovHome', goHome);
-on('pauseBtn', togglePause); on('muteBtn', toggleMute); on('sndBtn', toggleMute);
+on('pauseBtn', togglePause); on('muteBtn', toggleMute);
+on('openSettings', () => { setFrom = 'menu'; renderSettings(); showPanel('settings'); });
+on('pauseSettings', () => { setFrom = 'pause'; renderSettings(); showPanel('settings'); });
+on('setBack', () => showPanel(setFrom));
 $('name').addEventListener('input', homeInfo);
 
 $('name').value = read('cc2-name') || '';
-$('muteBtn').classList.toggle('off', muted);
+syncMute();
+addEventListener('pointerdown', audio, { once: true }); addEventListener('keydown', audio, { once: true });
 player.w = 92; player.x = (W - 92) / 2;
 renderHearts(); hud(); showPanel('menu'); fit();
 requestAnimationFrame(t => { last = t; loop(t); });

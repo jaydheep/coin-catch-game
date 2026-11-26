@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <title>Coin Catch</title>
-<meta name="description" content="Coin Catch: 1000 stages of reflex and brain puzzles. Catch coins, solve sums, follow rules, dodge bombs.">
+<meta name="author" content="jaydheep R (JK)">
+<meta name="description" content="Coin Catch by jaydheep R (JK): 1000 stages of reflex and brain puzzles. Catch coins, solve sums, follow rules, dodge bombs.">
 <meta name="theme-color" content="#160a2b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="settings.css">
 </head>
 <body>
 <div class="app">
@@ -43,21 +45,28 @@
           <button id="openStages" type="button">Stages</button>
           <button id="openBoard" type="button">Board</button>
           <button id="howBtn" type="button">How to play</button>
-          <button id="sndBtn" type="button">Sound on</button>
+          <button id="openSettings" type="button">Settings</button>
         </div>
-        <small>Created by Jaydheep</small>
+        <small class="author">Created by jaydheep R (JK)</small>
       </section>
       <section id="help" class="panel" hidden>
         <h2>How to play</h2>
         <ul class="how">
           <li><b>Move:</b> drag your finger left and right on the game. On a PC use the arrow keys or A / D.</li>
-          <li><b>Catch</b> coins and gems. <b>Dodge</b> bombs. You have 3 lives.</li>
+          <li><b>Catch</b> coins and gems. <b>Dodge</b> bombs. Lives depend on your difficulty setting.</li>
           <li>The mission is shown at the top of every stage.</li>
           <li><b>Brain stages</b> show a puzzle card: make an exact total, follow a rule, repeat a colour order, or answer a maths question.</li>
-          <li>A wrong catch costs a life from stage 20.</li>
+          <li>A wrong catch costs a life from stage 20 on Normal.</li>
           <li><b>Power-ups:</b> S shield, M magnet, T slow, x2 double, W wide.</li>
+          <li>Open <b>Settings</b> for difficulty, music, vibration, puzzle assist and more.</li>
         </ul>
         <button id="helpGo" class="cta" type="button">Back</button>
+      </section>
+      <section id="settings" class="panel setp" hidden>
+        <h2>Settings</h2>
+        <div id="setList" class="setlist"></div>
+        <small class="author">Coin Catch &middot; created by jaydheep R (JK)</small>
+        <button id="setBack" class="cta" type="button">Back</button>
       </section>
       <section id="stages" class="panel" hidden>
         <div class="nav">
@@ -79,9 +88,8 @@
         <h2>Paused</h2>
         <p>Resume starts with a 3 second countdown.</p>
         <button id="resume" class="cta" type="button">Resume</button>
-        <button id="restart" class="ghost" type="button">Restart stage</button>
-        <button id="pauseStages" class="ghost" type="button">All stages</button>
-        <button id="pauseHome" class="ghost" type="button">Home</button>
+        <div class="two"><button id="restart" class="ghost" type="button">Restart</button><button id="pauseSettings" class="ghost" type="button">Settings</button></div>
+        <div class="two"><button id="pauseStages" class="ghost" type="button">All stages</button><button id="pauseHome" class="ghost" type="button">Home</button></div>
       </section>
       <section id="clear" class="panel" hidden>
         <h2 class="win">STAGE CLEAR</h2>

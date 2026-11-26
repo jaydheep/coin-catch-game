@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Coin Catch</title>
-<meta name="description" content="Catch coins, grab bonuses, dodge bombs. A fast arcade game in your browser.">
+<meta name="description" content="Catch coins, grab bonuses, dodge bombs. A fast neon arcade game in your browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
@@ -14,28 +14,34 @@
 <div class="app">
   <section class="game">
     <header class="hud">
-      <div><span>Score</span><b id="score">0</b></div>
-      <div id="who"></div>
-      <div><span>Best</span><b id="best">0</b></div>
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="mid"><div id="who" class="who"></div><div id="combo" class="combo"></div></div>
+      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <div class="btns">
+        <button id="mute" type="button">Sound on</button>
+        <button id="stop" type="button">Stop and save</button>
+      </div>
     </header>
-    <div class="stage">
-      <canvas id="c" width="400" height="560" aria-label="Coin Catch game"></canvas>
-      <div id="overlay">
-        <h1>Coin Catch</h1>
-        <p id="sub">Move the plate. Catch what falls.</p>
-        <ul class="legend">
-          <li><i class="coin"></i>Coin +1</li>
-          <li><i class="bonus"></i>Bonus +5</li>
-          <li><i class="bomb"></i>Bomb -2</li>
-        </ul>
-        <input id="name" maxlength="14" placeholder="Your name" autocomplete="off" aria-label="Your name">
-        <button id="start" type="button">Play</button>
-        <small>Arrow keys or drag to move</small>
+    <div id="wrap" class="wrap">
+      <div id="stage" class="stage">
+        <canvas id="c" aria-label="Coin Catch game"></canvas>
+        <div id="overlay">
+          <h1 id="title">Coin Catch</h1>
+          <p id="sub">Slide the plate. Catch what falls.</p>
+          <ul class="legend">
+            <li><i class="coin"></i>Coin +1</li>
+            <li><i class="bonus"></i>Bonus +5</li>
+            <li><i class="bomb"></i>Bomb -2</li>
+          </ul>
+          <input id="name" maxlength="14" placeholder="Your name" autocomplete="off" aria-label="Your name">
+          <button id="start" type="button">Play</button>
+          <small>Arrow keys, A / D, or drag to move. Catch 5 in a row to raise your multiplier.</small>
+          <ol id="list2" class="mini"></ol>
+        </div>
       </div>
     </div>
     <div class="pad">
       <button id="left" type="button" aria-label="Move left">&#9664;</button>
-      <button id="stop" type="button">Stop and save</button>
       <button id="right" type="button" aria-label="Move right">&#9654;</button>
     </div>
   </section>

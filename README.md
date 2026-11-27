@@ -2,7 +2,14 @@
 
 Created by **jaydheep R (JK)**.
 
-An arcade game with **1000 stages** that mixes reflexes with brain puzzles. Every 10 stages you enter a new world with its own colours and weather. Stage 10 of each world is a boss stage.
+An arcade game with **1000 stages** that mixes reflexes with brain puzzles.
+
+## Worlds
+Every 10 stages you enter a new world. There are 100 worlds, and each world name is made of two words that decide how it looks:
+- The **first word** sets the colours, the weather and the sky: Neon (synthwave sun, light streaks), Crystal (sparkles), Ember (rising embers), Frozen (snow and aurora), Velvet (drifting petals), Solar (a big sun), Lunar (moon and twinkling stars), Jade (fireflies), Cobalt (rain and lightning), Amber (warm pollen).
+- The **second word** sets the landscape at the bottom of the screen: Harbor (boats, cranes, lighthouse), Canyon (rock mesas), Garden (hedges, trees, flowers), Temple (pagodas and lanterns), Skyline (lit city towers), Lagoon (palm islands), Summit (snowy peaks), Bazaar (tents and bunting), Reef (coral, kelp, fish), Citadel (castle towers and torches).
+
+So "Neon Harbor" and "Frozen Citadel" look completely different. Stage 10 of each world is a boss stage.
 
 ## Stage types (repeat every 10 stages)
 - Action: score points, collect gems, survive, let bombs fall past.
